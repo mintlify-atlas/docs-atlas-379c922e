@@ -63,7 +63,7 @@ To update Dockhand to the latest version:
 
 ```bash
 # Pull latest image
-docker pull ghcr.io/finsys/dockhand:latest
+docker pull fnsys/dockhand:latest
 
 # Stop current instance
 docker stop dockhand
@@ -73,12 +73,12 @@ docker rm dockhand
 
 # Start new version
 docker run -d \
-  -p 8033:8033 \
+  -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v dockhand-data:/data \
+  -v dockhand_data:/app/data \
   --name dockhand \
   --restart unless-stopped \
-  ghcr.io/finsys/dockhand:latest
+  fnsys/dockhand:latest
 ```
 
 ### Database Migrations
@@ -155,7 +155,7 @@ Dockhand follows a continuous delivery model:
 - **Major releases** (x.0.0): Significant changes and major features
 
 Releases are published to:
-- [GitHub Container Registry](https://ghcr.io/finsys/dockhand)
+- [Docker Hub](https://hub.docker.com/r/fnsys/dockhand)
 - [GitHub Releases](https://github.com/Finsys/dockhand/releases)
 
 ---

@@ -25,16 +25,17 @@ ls -la /var/run/docker.sock
 
 #### Port Already in Use
 
-**Problem**: Default port 8033 is already occupied.
+**Problem**: Default port 3000 is already occupied.
 
 **Solution**:
 ```bash
 # Change the port mapping
 docker run -d \
-  -p 8034:8033 \
+  -p 8080:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
   --name dockhand \
-  ghcr.io/finsys/dockhand:latest
+  fnsys/dockhand:latest
 ```
 
 ### Connection Issues
@@ -223,10 +224,11 @@ docker exec -it dockhand bun scripts/reset-password.js admin
 ```bash
 # Ensure volume is mounted correctly
 docker run -d \
-  -v dockhand-data:/data \
+  -p 3000:3000 \
+  -v dockhand_data:/app/data \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --name dockhand \
-  ghcr.io/finsys/dockhand:latest
+  fnsys/dockhand:latest
 
 # Verify volume exists
 docker volume ls | grep dockhand

@@ -218,8 +218,9 @@ docker build -t dockhand:dev .
 
 # Run locally
 docker run -d \
-  -p 8033:8033 \
+  -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
   --name dockhand-dev \
   dockhand:dev
 ```
