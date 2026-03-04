@@ -1,0 +1,205 @@
+{
+  "projectType": "saas",
+  "projectName": "Dockhand",
+  "projectDescription": "Modern Docker management application with real-time container orchestration, Compose stacks, and multi-environment support",
+  "theme": "aspen",
+  "primaryColor": "#405064",
+  "lightColor": "#c0c4c9",
+  "darkColor": "#122d48",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["introduction", "features", "architecture"]
+          },
+          {
+            "group": "Getting Started",
+            "pages": ["installation", "quickstart", "configuration"]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/containers",
+              "features/stacks",
+              "features/images",
+              "features/networks",
+              "features/volumes",
+              "features/environments"
+            ]
+          },
+          {
+            "group": "Advanced Features",
+            "pages": [
+              "features/git-integration",
+              "features/scheduling",
+              "features/monitoring",
+              "features/notifications",
+              "features/file-browser",
+              "features/terminal"
+            ]
+          },
+          {
+            "group": "Authentication & Security",
+            "pages": [
+              "auth/overview",
+              "auth/local-users",
+              "auth/oidc",
+              "auth/ldap",
+              "auth/2fa",
+              "auth/rbac"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/docker-compose",
+              "deployment/environment-variables",
+              "deployment/database",
+              "deployment/tls"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/remote-hosts",
+              "integrations/hawser",
+              "integrations/registries",
+              "integrations/webhooks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Overview",
+            "pages": ["api/overview", "api/authentication"]
+          },
+          {
+            "group": "Container Management",
+            "pages": [
+              "api/containers/list",
+              "api/containers/inspect",
+              "api/containers/lifecycle",
+              "api/containers/stats",
+              "api/containers/logs",
+              "api/containers/exec"
+            ]
+          },
+          {
+            "group": "Stack Management",
+            "pages": [
+              "api/stacks/list",
+              "api/stacks/deploy",
+              "api/stacks/update",
+              "api/stacks/delete",
+              "api/stacks/git-sync"
+            ]
+          },
+          {
+            "group": "Image Management",
+            "pages": [
+              "api/images/list",
+              "api/images/pull",
+              "api/images/push",
+              "api/images/scan",
+              "api/images/prune"
+            ]
+          },
+          {
+            "group": "Network & Volume",
+            "pages": [
+              "api/networks/list",
+              "api/networks/create",
+              "api/volumes/list",
+              "api/volumes/create"
+            ]
+          },
+          {
+            "group": "Environment Management",
+            "pages": [
+              "api/environments/list",
+              "api/environments/create",
+              "api/environments/update"
+            ]
+          },
+          {
+            "group": "Scheduling & Automation",
+            "pages": [
+              "api/schedules/list",
+              "api/schedules/create",
+              "api/auto-update/configure"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Help",
+            "pages": ["troubleshooting", "faq", "changelog"]
+          },
+          {
+            "group": "Community",
+            "pages": ["contributing", "license"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time container management with start, stop, restart, and monitoring",
+    "Docker Compose stack orchestration with visual editor",
+    "Git integration with webhooks and auto-sync for stack deployments",
+    "Multi-environment support for local and remote Docker hosts",
+    "Interactive terminal access and real-time log streaming",
+    "Container file browser with upload/download capabilities",
+    "Authentication via SSO (OIDC), local users, LDAP, and 2FA",
+    "Role-Based Access Control (RBAC) for enterprise deployments",
+    "Automated container updates with vulnerability scanning",
+    "Scheduled tasks and cron job management",
+    "Real-time metrics and activity dashboard",
+    "Email and webhook notifications",
+    "Private registry integration",
+    "Network and volume management",
+    "Image scanning and security analysis",
+    "SQLite and PostgreSQL database support"
+  ],
+  "publicApiSurface": [
+    "GET /api/containers - List all containers",
+    "POST /api/containers/[id]/start - Start container",
+    "POST /api/containers/[id]/stop - Stop container",
+    "POST /api/containers/[id]/restart - Restart container",
+    "DELETE /api/containers/[id] - Remove container",
+    "GET /api/containers/[id]/logs - Stream container logs",
+    "POST /api/containers/[id]/exec - Execute command in container",
+    "GET /api/stacks - List compose stacks",
+    "POST /api/stacks - Deploy new stack",
+    "PUT /api/stacks/[name] - Update stack",
+    "DELETE /api/stacks/[name] - Remove stack",
+    "POST /api/stacks/[name]/git-sync - Sync stack from Git",
+    "GET /api/images - List images",
+    "POST /api/images/pull - Pull image from registry",
+    "POST /api/images/push - Push image to registry",
+    "POST /api/images/scan - Scan image for vulnerabilities",
+    "GET /api/networks - List networks",
+    "POST /api/networks - Create network",
+    "GET /api/volumes - List volumes",
+    "POST /api/volumes - Create volume",
+    "GET /api/environments - List Docker environments",
+    "POST /api/environments - Add new environment",
+    "PUT /api/environments/[id] - Update environment",
+    "GET /api/schedules - List scheduled tasks",
+    "POST /api/schedules - Create scheduled task",
+    "GET /api/activity - Get activity dashboard data",
+    "GET /api/system - Get system information",
+    "POST /api/auth/login - Authenticate user",
+    "POST /api/auth/logout - Logout user"
+  ]
+}
