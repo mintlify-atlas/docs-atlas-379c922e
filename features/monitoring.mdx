@@ -1,0 +1,626 @@
+---
+title: 'Monitoring & Metrics'
+description: 'Real-time container statistics, performance metrics, and resource utilization tracking'
+icon: 'chart-line'
+---
+
+## Overview
+
+Dockhand provides comprehensive monitoring capabilities for containers, images, and host systems. Track CPU, memory, network I/O, and disk usage in real-time with historical data retention and event tracking.
+
+## Container Statistics
+
+### Real-Time Metrics
+
+Fetch current statistics for any container:
+
+```bash
+GET /api/containers/{id}/stats?env={environmentId}
+```
+
+Response:
+```json
+{
+  "cpuPercent": 12.45,
+  "memoryUsage": 536870912,
+  "memoryRaw": 629145600,
+  "memoryCache": 92274688,
+  "memoryLimit": 8589934592,
+  "memoryPercent": 6.25,
+  "networkRx": 1048576,
+  "networkTx": 524288,
+  "blockRead": 2097152,
+  "blockWrite": 1048576,
+  "timestamp": 1709510400000
+}
+```
+
+### Metric Calculations
+
+Dockhand calculates metrics using Docker's standard formulas:
+
+#### CPU Percentage
+
+```typescript:src/routes/api/containers/[id]/stats/+server.ts
+function calculateCpuPercent(stats: any): number {
+  const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+  const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+  const cpuCount = stats.cpu_stats.online_cpus || stats.cpu_stats.cpu_usage.percpu_usage?.length || 1;
+
+  if (systemDelta > 0 && cpuDelta > 0) {
+    return (cpuDelta / systemDelta) * cpuCount * 100;
+  }
+  return 0;
+}
+```
+
+#### Memory Usage
+
+Docker-compatible memory calculation (subtracts cache):
+
+```typescript:src/routes/api/containers/[id]/stats/+server.ts
+/**
+ * Calculate memory usage the same way Docker CLI does.
+ * Docker subtracts cache (inactive_file) from total usage to show actual memory consumption.
+ * - cgroup v2: subtract inactive_file from stats
+ * - cgroup v1: subtract total_inactive_file from stats
+ */
+function calculateMemoryUsage(memoryStats: any): { usage: number; raw: number; cache: number } {
+  const raw = memoryStats?.usage || 0;
+  const stats = memoryStats?.stats || {};
+
+  // cgroup v2 uses 'inactive_file', cgroup v1 uses 'total_inactive_file'
+  const cache = stats.inactive_file ?? stats.total_inactive_file ?? 0;
+
+  // Only subtract cache if it's less than raw usage (sanity check)
+  const usage = (cache > 0 && cache < raw) ? raw - cache : raw;
+
+  return { usage, raw, cache };
+}
+```
+
+#### Network I/O
+
+```typescript:src/routes/api/containers/[id]/stats/+server.ts
+function calculateNetworkIO(stats: any): { rx: number; tx: number } {
+  let rx = 0;
+  let tx = 0;
+
+  if (stats.networks) {
+    for (const iface of Object.values(stats.networks) as any[]) {
+      rx += iface.rx_bytes || 0;
+      tx += iface.tx_bytes || 0;
+    }
+  }
+
+  return { rx, tx };
+}
+```
+
+#### Block I/O
+
+```typescript:src/routes/api/containers/[id]/stats/+server.ts
+function calculateBlockIO(stats: any): { read: number; write: number } {
+  let read = 0;
+  let write = 0;
+
+  const ioStats = stats.blkio_stats?.io_service_bytes_recursive;
+  if (Array.isArray(ioStats)) {
+    for (const entry of ioStats) {
+      if (entry.op === 'read' || entry.op === 'Read') {
+        read += entry.value || 0;
+      } else if (entry.op === 'write' || entry.op === 'Write') {
+        write += entry.value || 0;
+      }
+    }
+  }
+
+  return { read, write };
+}
+```
+
+### Streaming Statistics
+
+Get continuous updates via Server-Sent Events:
+
+```bash
+GET /api/containers/stats/stream
+```
+
+Response (SSE stream):
+```
+event: stats
+data: {"containerId":"abc123","cpuPercent":15.2,"memoryPercent":8.5,...}
+
+event: stats
+data: {"containerId":"abc123","cpuPercent":14.8,"memoryPercent":8.6,...}
+```
+
+### Bulk Statistics
+
+Get stats for all containers in an environment:
+
+```bash
+GET /api/containers/stats?env={environmentId}
+```
+
+Response:
+```json
+{
+  "containers": [
+    {
+      "id": "abc123",
+      "name": "nginx",
+      "cpuPercent": 12.45,
+      "memoryPercent": 6.25,
+      "networkRx": 1048576,
+      "networkTx": 524288
+    },
+    {
+      "id": "def456",
+      "name": "postgres",
+      "cpuPercent": 8.32,
+      "memoryPercent": 15.78,
+      "networkRx": 524288,
+      "networkTx": 262144
+    }
+  ]
+}
+```
+
+## Host Metrics
+
+### System Statistics
+
+Track host-level resource usage:
+
+```typescript
+interface HostMetrics {
+  id: number;
+  environmentId: number;
+  cpuPercent: number;
+  memoryPercent: number;
+  memoryUsed: number;
+  memoryTotal: number;
+  timestamp: string;
+}
+```
+
+### Database Schema
+
+```typescript:src/lib/server/db/schema/pg-schema.ts
+export const hostMetrics = pgTable('host_metrics', {
+  id: serial('id').primaryKey(),
+  environmentId: integer('environment_id').references(() => environments.id, { onDelete: 'cascade' }),
+  cpuPercent: doublePrecision('cpu_percent').notNull(),
+  memoryPercent: doublePrecision('memory_percent').notNull(),
+  memoryUsed: bigint('memory_used', { mode: 'number' }),
+  memoryTotal: bigint('memory_total', { mode: 'number' }),
+  timestamp: timestamp('timestamp', { mode: 'string' }).defaultNow()
+}, (table) => ({
+  envTimestampIdx: index('host_metrics_env_timestamp_idx').on(table.environmentId, table.timestamp)
+}));
+```
+
+### Collection Settings
+
+Configure metric collection per environment:
+
+```typescript:src/lib/server/db/schema/pg-schema.ts
+export const environments = pgTable('environments', {
+  // ...
+  collectActivity: boolean('collect_activity').default(true),
+  collectMetrics: boolean('collect_metrics').default(true),
+  highlightChanges: boolean('highlight_changes').default(true),
+  // ...
+});
+```
+
+## Event Tracking
+
+### Container Events
+
+Track container lifecycle events:
+
+```typescript
+type ContainerEventType = 
+  | 'create'
+  | 'start'
+  | 'stop'
+  | 'restart'
+  | 'pause'
+  | 'unpause'
+  | 'kill'
+  | 'die'
+  | 'destroy'
+  | 'health_status';
+
+interface ContainerEvent {
+  id: number;
+  environmentId: number;
+  containerId: string;
+  containerName: string;
+  eventType: ContainerEventType;
+  timestamp: string;
+  metadata: Record<string, any>;
+}
+```
+
+### Stack Events
+
+```typescript:src/lib/server/db/schema/pg-schema.ts
+export const stackEvents = pgTable('stack_events', {
+  id: serial('id').primaryKey(),
+  environmentId: integer('environment_id').references(() => environments.id, { onDelete: 'cascade' }),
+  stackName: text('stack_name').notNull(),
+  eventType: text('event_type').notNull(),
+  timestamp: timestamp('timestamp', { mode: 'string' }).defaultNow(),
+  metadata: text('metadata')
+});
+```
+
+### Query Events
+
+```bash
+# Get recent events
+GET /api/events?limit=100&type=container&environmentId=1
+
+# Get events for specific container
+GET /api/events?containerId=abc123
+
+# Get events in time range
+GET /api/events?from=2024-03-01T00:00:00Z&to=2024-03-04T23:59:59Z
+```
+
+## Dashboard Statistics
+
+### Overview Statistics
+
+Get aggregated stats for the dashboard:
+
+```bash
+GET /api/dashboard/stats?env={environmentId}
+```
+
+Response:
+```json
+{
+  "containers": {
+    "total": 15,
+    "running": 12,
+    "stopped": 3,
+    "unhealthy": 1
+  },
+  "images": {
+    "total": 45,
+    "dangling": 8,
+    "totalSize": 12884901888
+  },
+  "volumes": {
+    "total": 23,
+    "inUse": 18,
+    "totalSize": 8589934592
+  },
+  "networks": {
+    "total": 5,
+    "custom": 3
+  },
+  "host": {
+    "cpuPercent": 35.5,
+    "memoryPercent": 62.3,
+    "diskUsed": 107374182400,
+    "diskTotal": 214748364800
+  }
+}
+```
+
+### Real-Time Dashboard Stream
+
+```bash
+GET /api/dashboard/stats/stream
+```
+
+Continuous dashboard updates via SSE:
+```
+event: stats
+data: {"containers":{"running":12},"host":{"cpuPercent":35.5},...}
+```
+
+## Activity Tracking
+
+### Activity Log
+
+Track user actions and system events:
+
+```typescript
+interface ActivityLog {
+  id: number;
+  userId: number | null;
+  username: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  environmentId: number | null;
+  timestamp: string;
+  details: Record<string, any>;
+}
+```
+
+### Activity Statistics
+
+```bash
+GET /api/activity/stats
+```
+
+Response:
+```json
+{
+  "today": {
+    "totalActions": 156,
+    "uniqueUsers": 8,
+    "topActions": [
+      {"action": "container_start", "count": 45},
+      {"action": "container_inspect", "count": 32},
+      {"action": "image_pull", "count": 18}
+    ]
+  },
+  "week": {
+    "totalActions": 892,
+    "uniqueUsers": 12,
+    "dailyBreakdown": [
+      {"date": "2024-03-01", "count": 145},
+      {"date": "2024-03-02", "count": 132},
+      {"date": "2024-03-03", "count": 156}
+    ]
+  }
+}
+```
+
+## Performance Monitoring
+
+### Container Performance Trends
+
+Track performance over time:
+
+```bash
+GET /api/containers/{id}/metrics/history?period=24h&interval=5m
+```
+
+Response:
+```json
+{
+  "metrics": [
+    {
+      "timestamp": "2024-03-04T00:00:00Z",
+      "cpuPercent": 12.5,
+      "memoryPercent": 8.2,
+      "networkRxRate": 1048576,
+      "networkTxRate": 524288
+    },
+    {
+      "timestamp": "2024-03-04T00:05:00Z",
+      "cpuPercent": 15.3,
+      "memoryPercent": 8.5,
+      "networkRxRate": 1572864,
+      "networkTxRate": 786432
+    }
+  ]
+}
+```
+
+### Resource Usage Alerts
+
+Configure alerts for resource thresholds:
+
+```typescript
+{
+  "containerId": "abc123",
+  "alerts": {
+    "cpuPercent": {
+      "threshold": 80,
+      "duration": 300,  // 5 minutes
+      "action": "notify"
+    },
+    "memoryPercent": {
+      "threshold": 90,
+      "duration": 60,
+      "action": "restart"
+    }
+  }
+}
+```
+
+## Health Monitoring
+
+### Container Health Status
+
+```typescript
+type HealthStatus = 'healthy' | 'unhealthy' | 'starting' | 'none';
+
+interface ContainerHealth {
+  status: HealthStatus;
+  failingStreak: number;
+  log: Array<{
+    start: string;
+    end: string;
+    exitCode: number;
+    output: string;
+  }>;
+}
+```
+
+### Health Check Configuration
+
+```yaml
+# Docker Compose health check
+services:
+  web:
+    image: nginx
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+### Query Unhealthy Containers
+
+```bash
+GET /api/containers?status=unhealthy&env={environmentId}
+```
+
+## Metrics Retention
+
+### Retention Policies
+
+Configure how long to keep metrics data:
+
+```typescript
+{
+  "hostMetrics": {
+    "enabled": true,
+    "retentionDays": 30,
+    "aggregationInterval": "5m"
+  },
+  "containerEvents": {
+    "enabled": true,
+    "retentionDays": 7
+  },
+  "activityLogs": {
+    "enabled": true,
+    "retentionDays": 90
+  }
+}
+```
+
+### Cleanup Configuration
+
+```bash
+# Configure automatic cleanup
+PUT /api/settings
+```
+
+```json
+{
+  "eventCleanupEnabled": true,
+  "eventCleanupCron": "0 3 * * *",
+  "eventRetentionDays": 7,
+  "scheduleCleanupEnabled": true,
+  "scheduleCleanupCron": "0 2 * * *",
+  "scheduleRetentionDays": 30
+}
+```
+
+## Integration Examples
+
+### Grafana Integration
+
+Expose metrics for Grafana:
+
+```typescript
+// Custom endpoint for Grafana JSON datasource
+app.get('/api/metrics/grafana/query', async (req, res) => {
+  const { target, from, to } = req.body;
+  
+  const metrics = await getMetricsInRange(target, from, to);
+  
+  res.json(metrics.map(m => ({
+    target: target,
+    datapoints: [[m.value, m.timestamp]]
+  })));
+});
+```
+
+### Prometheus Export
+
+```typescript
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  const containers = await listContainers();
+  
+  let metrics = '';
+  for (const container of containers) {
+    const stats = await getContainerStats(container.id);
+    metrics += `container_cpu_percent{name="${container.name}"} ${stats.cpuPercent}\n`;
+    metrics += `container_memory_percent{name="${container.name}"} ${stats.memoryPercent}\n`;
+  }
+  
+  res.set('Content-Type', 'text/plain');
+  res.send(metrics);
+});
+```
+
+## Best Practices
+
+### Monitoring Strategy
+
+1. **Enable metrics collection** only on production environments
+2. **Set appropriate retention periods** based on disk space
+3. **Use streaming endpoints** for real-time dashboards
+4. **Configure cleanup jobs** to prevent database bloat
+5. **Monitor the monitor** - track Dockhand's own resource usage
+
+### Performance Optimization
+
+```typescript
+// Batch statistics collection
+const stats = await Promise.all(
+  containers.map(c => getContainerStats(c.id))
+);
+
+// Use indexed queries for historical data
+const metrics = await db.query(
+  'SELECT * FROM host_metrics WHERE environment_id = $1 AND timestamp > $2',
+  [envId, since]
+);
+```
+
+### Alert Configuration
+
+```typescript
+// Progressive alerting
+{
+  "cpuHigh": {
+    "warn": 70,   // Log warning
+    "alert": 85,  // Send notification
+    "critical": 95 // Take action (restart)
+  },
+  "memoryHigh": {
+    "warn": 80,
+    "alert": 90,
+    "critical": 95
+  }
+}
+```
+
+## API Reference
+
+```bash
+# Container stats
+GET /api/containers/{id}/stats
+GET /api/containers/stats
+GET /api/containers/stats/stream
+
+# Dashboard stats
+GET /api/dashboard/stats
+GET /api/dashboard/stats/stream
+
+# Events
+GET /api/events
+GET /api/events?containerId={id}
+GET /api/events?type={type}&from={timestamp}
+
+# Activity
+GET /api/activity
+GET /api/activity/stats
+
+# Host metrics
+GET /api/host/metrics
+GET /api/host/metrics/history
+
+# Health
+GET /api/containers/{id}/health
+GET /api/containers?status=unhealthy
+```

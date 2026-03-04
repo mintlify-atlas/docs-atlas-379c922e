@@ -1,0 +1,532 @@
+---
+title: 'Git Webhooks'
+description: 'Automate deployments with GitHub, GitLab, and Gitea webhooks'
+icon: 'webhook'
+---
+
+Dockhand supports Git webhooks for automatic stack deployments when code changes are pushed to your repository. Connect GitHub, GitLab, or any Git service to trigger updates automatically.
+
+## Overview
+
+Webhooks enable continuous deployment by automatically pulling and deploying your compose stacks when changes are detected in your Git repository.
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant Git as Git Server
+    participant D as Dockhand
+    participant Doc as Docker
+    Dev->>Git: git push
+    Git->>D: Webhook POST
+    D->>D: Verify signature
+    D->>Git: Clone repository
+    D->>Doc: Deploy stack
+    D->>Doc: Container updated
+```
+
+## Configuration
+
+### Enable Webhooks
+
+<Steps>
+  <Step title="Create Git stack">
+    Navigate to **Stacks** > **Add from Git** and connect your repository.
+  </Step>
+  
+  <Step title="Enable webhook">
+    In the stack settings:
+    1. Toggle **Webhook Enabled**
+    2. Click **Generate Secret** (optional but recommended)
+    3. Copy the webhook URL
+  </Step>
+  
+  <Step title="Configure Git provider">
+    Add the webhook URL to your Git repository settings.
+  </Step>
+</Steps>
+
+### Webhook URL Format
+
+```
+https://dockhand.example.com/api/git/webhook/{repository-id}
+```
+
+Or for individual stacks:
+
+```
+https://dockhand.example.com/api/git/stacks/{stack-id}/webhook
+```
+
+## Git Provider Setup
+
+<Tabs>
+  <Tab title="GitHub">
+    <Steps>
+      <Step title="Open repository settings">
+        Navigate to your GitHub repository > **Settings** > **Webhooks**
+      </Step>
+      
+      <Step title="Add webhook">
+        Click **Add webhook** and configure:
+        
+        ```yaml
+        Payload URL: https://dockhand.example.com/api/git/webhook/1
+        Content type: application/json
+        Secret: your-webhook-secret
+        ```
+      </Step>
+      
+      <Step title="Select events">
+        Choose **Just the push event** (default)
+      </Step>
+      
+      <Step title="Save">
+        Click **Add webhook** and GitHub will send a test ping
+      </Step>
+    </Steps>
+    
+    #### Signature Verification
+    
+    GitHub signs webhook payloads with HMAC-SHA256:
+    
+    ```http
+    X-Hub-Signature-256: sha256=abc123...
+    ```
+    
+    Dockhand automatically verifies this signature using your webhook secret.
+  </Tab>
+  
+  <Tab title="GitLab">
+    <Steps>
+      <Step title="Open repository settings">
+        Navigate to your GitLab project > **Settings** > **Webhooks**
+      </Step>
+      
+      <Step title="Add webhook">
+        Configure the webhook:
+        
+        ```yaml
+        URL: https://dockhand.example.com/api/git/webhook/1
+        Secret token: your-webhook-secret
+        Trigger: Push events
+        ```
+      </Step>
+      
+      <Step title="Enable SSL verification">
+        Leave **Enable SSL verification** checked unless using self-signed certificates
+      </Step>
+      
+      <Step title="Add webhook">
+        Click **Add webhook** and test with **Test** > **Push events**
+      </Step>
+    </Steps>
+    
+    #### Signature Verification
+    
+    GitLab uses a simple token in the header:
+    
+    ```http
+    X-Gitlab-Token: your-webhook-secret
+    ```
+  </Tab>
+  
+  <Tab title="Gitea">
+    <Steps>
+      <Step title="Open repository settings">
+        Navigate to your Gitea repository > **Settings** > **Webhooks**
+      </Step>
+      
+      <Step title="Add webhook">
+        Click **Add Webhook** > **Gitea** and configure:
+        
+        ```yaml
+        Target URL: https://dockhand.example.com/api/git/webhook/1
+        HTTP Method: POST
+        POST Content Type: application/json
+        Secret: your-webhook-secret
+        ```
+      </Step>
+      
+      <Step title="Select events">
+        Choose **Push events**
+      </Step>
+      
+      <Step title="Add webhook">
+        Click **Add Webhook** and test it
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Generic Git">
+    Any Git service supporting webhooks can be configured:
+    
+    **Requirements**:
+    - POST request to webhook URL
+    - JSON payload
+    - Optional signature/token authentication
+    
+    **Minimal payload**:
+    ```json
+    {
+      "ref": "refs/heads/main",
+      "repository": {
+        "url": "https://git.example.com/user/repo.git"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Webhook Security
+
+### Secret Verification
+
+Webhook secrets prevent unauthorized deployments:
+
+<Steps>
+  <Step title="Generate secret">
+    In Dockhand, click **Generate Secret** for your webhook. This creates a secure random token.
+  </Step>
+  
+  <Step title="Configure in Git">
+    Add the secret to your Git provider's webhook configuration.
+  </Step>
+  
+  <Step title="Verification">
+    Dockhand verifies every webhook request:
+    - **GitHub**: Validates HMAC-SHA256 signature
+    - **GitLab**: Compares X-Gitlab-Token header
+    - **Others**: Checks custom signature or token
+  </Step>
+</Steps>
+
+<Warning>
+  Always use webhook secrets in production. Without secrets, anyone who knows your webhook URL can trigger deployments.
+</Warning>
+
+### Signature Validation
+
+The webhook endpoint verifies signatures before processing:
+
+```typescript
+function verifySignature(payload: string, signature: string, secret: string): boolean {
+  // GitHub: sha256=<hmac>
+  if (signature.startsWith('sha256=')) {
+    const expectedSignature = 'sha256=' + 
+      crypto.createHmac('sha256', secret)
+        .update(payload)
+        .digest('hex');
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  }
+  
+  // GitLab: direct token comparison
+  return signature === secret;
+}
+```
+
+## Branch Filtering
+
+Configure which branch triggers deployments:
+
+```yaml Stack Configuration
+Repository: https://github.com/user/app.git
+Branch: main
+Webhook Enabled: Yes
+```
+
+Only pushes to the configured branch will trigger deployments. Pushes to other branches are ignored.
+
+### Multiple Environments
+
+Deploy different branches to different environments:
+
+```yaml
+# Production Stack
+Branch: main
+Environment: Production
+
+# Staging Stack
+Branch: develop
+Environment: Staging
+```
+
+Configure separate webhooks for each stack to deploy the correct branch.
+
+## Webhook Payload
+
+Dockhand processes webhook payloads to extract repository information:
+
+### GitHub Payload
+
+```json
+{
+  "ref": "refs/heads/main",
+  "repository": {
+    "clone_url": "https://github.com/user/repo.git",
+    "ssh_url": "git@github.com:user/repo.git"
+  },
+  "pusher": {
+    "name": "username",
+    "email": "user@example.com"
+  },
+  "commits": [
+    {
+      "id": "abc123...",
+      "message": "Update compose file",
+      "timestamp": "2024-03-04T12:00:00Z"
+    }
+  ]
+}
+```
+
+### GitLab Payload
+
+```json
+{
+  "ref": "refs/heads/main",
+  "project": {
+    "git_http_url": "https://gitlab.com/user/repo.git",
+    "git_ssh_url": "git@gitlab.com:user/repo.git"
+  },
+  "user_name": "Username",
+  "user_email": "user@example.com",
+  "commits": [
+    {
+      "id": "abc123...",
+      "message": "Update compose file",
+      "timestamp": "2024-03-04T12:00:00+00:00"
+    }
+  ]
+}
+```
+
+## Deployment Process
+
+When a webhook is received:
+
+<Steps>
+  <Step title="Validate request">
+    - Verify webhook secret/signature
+    - Check payload format
+    - Validate repository ID
+  </Step>
+  
+  <Step title="Check branch">
+    - Extract branch from `ref` field
+    - Compare with configured branch
+    - Skip if branch doesn't match
+  </Step>
+  
+  <Step title="Clone repository">
+    - Use configured Git credentials
+    - Clone or pull latest changes
+    - Checkout specified branch
+  </Step>
+  
+  <Step title="Deploy stack">
+    - Parse compose file
+    - Apply environment variables
+    - Run `docker compose up -d`
+  </Step>
+  
+  <Step title="Log event">
+    - Record deployment in audit log
+    - Send notifications if configured
+    - Update last sync timestamp
+  </Step>
+</Steps>
+
+## Manual Webhook Trigger
+
+Trigger deployments manually via GET request:
+
+```bash
+curl "https://dockhand.example.com/api/git/webhook/1?secret=your-webhook-secret"
+```
+
+This is useful for:
+- Testing webhook configuration
+- Manual deployments outside Git workflow
+- Scheduled deployments via cron
+
+<Note>
+  The `secret` parameter must match the configured webhook secret.
+</Note>
+
+## Monitoring Webhooks
+
+### View Webhook History
+
+1. Navigate to **Stacks** > select stack > **Deployments**
+2. View deployment history with:
+   - Trigger source (webhook/manual)
+   - Timestamp
+   - Commit hash
+   - Status (success/failed)
+   - Duration
+
+### Audit Logs
+
+Webhook events are recorded in audit logs:
+
+```json
+{
+  "action": "webhook",
+  "entityType": "git_stack",
+  "entityId": "1",
+  "description": "Webhook deployment triggered",
+  "details": {
+    "source": "github",
+    "branch": "main",
+    "commit": "abc123...",
+    "result": "deployed"
+  },
+  "timestamp": "2024-03-04T12:00:00Z"
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Webhook not triggered">
+    - Verify webhook URL is correct and accessible from Git server
+    - Check webhook is enabled in both Git and Dockhand
+    - Review Git provider webhook delivery logs
+    - Test webhook manually:
+      ```bash
+      curl -X POST https://dockhand.example.com/api/git/webhook/1 \
+        -H "Content-Type: application/json" \
+        -d '{"ref": "refs/heads/main"}'
+      ```
+    - Check firewall allows inbound connections on webhook port
+  </Accordion>
+  
+  <Accordion title="Signature verification failed">
+    - Verify webhook secret matches between Git and Dockhand
+    - Check secret hasn't expired or been regenerated
+    - For GitHub, ensure Content-Type is `application/json`
+    - Review webhook delivery logs in Git provider
+    - Try regenerating the secret on both sides
+  </Accordion>
+  
+  <Accordion title="Deployment failed">
+    - Check Git credentials are valid and not expired
+    - Verify branch name matches configuration
+    - Ensure compose file exists at configured path
+    - Review deployment logs in Dockhand:
+      ```bash
+      Stacks > [stack] > Deployments > [latest] > View Logs
+      ```
+    - Check Docker daemon is accessible from Dockhand
+  </Accordion>
+  
+  <Accordion title="Wrong branch deployed">
+    - Verify branch configuration in stack settings
+    - Check webhook payload includes correct `ref` field
+    - Multiple stacks may be listening to same repository
+    - Review webhook delivery logs for branch information
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Configuration
+
+### Webhook with Basic Auth
+
+If your Dockhand instance requires authentication:
+
+```bash
+https://username:password@dockhand.example.com/api/git/webhook/1
+```
+
+<Warning>
+  Avoid embedding credentials in URLs. Use webhook secrets instead.
+</Warning>
+
+### Custom Headers
+
+Some Git providers support custom headers:
+
+```http
+X-Custom-Header: value
+Content-Type: application/json
+```
+
+Dockhand ignores custom headers but verifies standard authentication headers.
+
+### Webhook Retry Logic
+
+Git providers retry failed webhooks:
+
+- **GitHub**: Retries up to 3 times over several hours
+- **GitLab**: Retries based on configuration (default: 3 times)
+- **Gitea**: Configurable retry count and interval
+
+If deployment fails, Dockhand logs the error. Check deployment logs to diagnose issues.
+
+## API Reference
+
+Webhook endpoints:
+
+<ParamField path="POST /api/git/webhook/{id}" type="endpoint">
+  Trigger deployment for repository
+  
+  **Parameters**:
+  - `id`: Repository ID
+  
+  **Headers**:
+  - `X-Hub-Signature-256`: GitHub signature
+  - `X-Gitlab-Token`: GitLab token
+  
+  **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Deployment triggered"
+  }
+  ```
+</ParamField>
+
+<ParamField path="GET /api/git/webhook/{id}" type="endpoint">
+  Manual deployment trigger
+  
+  **Query Parameters**:
+  - `secret`: Webhook secret
+  
+  **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Deployment started"
+  }
+  ```
+</ParamField>
+
+See full [API Reference](/api/overview) for details.
+
+## Security Best Practices
+
+<Warning>
+  Webhook endpoints are publicly accessible. Always use secrets to verify authenticity.
+</Warning>
+
+1. **Always use webhook secrets** to verify requests
+2. **Enable HTTPS** for webhook URLs (required for production)
+3. **Restrict webhook IPs** in firewall if Git provider publishes IP ranges
+4. **Rotate secrets** periodically (every 90 days)
+5. **Monitor webhook logs** for suspicious activity
+6. **Use read-only tokens** for Git credentials when possible
+7. **Audit deployments** regularly to detect unauthorized changes
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Git Integration" icon="git" href="/features/git-integration">
+    Learn more about Git stack management
+  </Card>
+  <Card title="Notifications" icon="bell" href="/features/notifications">
+    Configure deployment notifications
+  </Card>
+</CardGroup>

@@ -1,0 +1,234 @@
+---
+title: 'List Networks'
+description: 'Retrieve all Docker networks for a specific environment'
+api: 'GET /api/networks'
+---
+
+## Overview
+
+Returns a list of all Docker networks in the specified environment. This endpoint requires an environment ID to be provided as a query parameter.
+
+## Authentication
+
+This endpoint requires authentication via cookies. The user must have the `networks:view` permission for the specified environment.
+
+## Query Parameters
+
+<ParamField query="env" type="integer" required>
+  The environment ID to list networks from. Required parameter.
+</ParamField>
+
+## Response
+
+<ResponseField name="networks" type="array">
+  Array of network objects
+  
+  <Expandable title="Network Object">
+    <ResponseField name="Id" type="string">
+      Unique network identifier
+    </ResponseField>
+    
+    <ResponseField name="Name" type="string">
+      Network name
+    </ResponseField>
+    
+    <ResponseField name="Driver" type="string">
+      Network driver type (bridge, host, overlay, macvlan, ipvlan, none)
+    </ResponseField>
+    
+    <ResponseField name="Scope" type="string">
+      Network scope (local, swarm, global)
+    </ResponseField>
+    
+    <ResponseField name="Internal" type="boolean">
+      Whether the network is internal-only (no external connectivity)
+    </ResponseField>
+    
+    <ResponseField name="Attachable" type="boolean">
+      Whether the network is attachable to standalone containers
+    </ResponseField>
+    
+    <ResponseField name="Ingress" type="boolean">
+      Whether this is a swarm ingress network
+    </ResponseField>
+    
+    <ResponseField name="EnableIPv6" type="boolean">
+      Whether IPv6 is enabled on the network
+    </ResponseField>
+    
+    <ResponseField name="IPAM" type="object">
+      IP Address Management configuration
+      
+      <Expandable title="IPAM Object">
+        <ResponseField name="Driver" type="string">
+          IPAM driver name (default: "default")
+        </ResponseField>
+        
+        <ResponseField name="Config" type="array">
+          Array of IPAM configuration objects
+          
+          <Expandable title="Config Object">
+            <ResponseField name="Subnet" type="string">
+              Network subnet in CIDR notation (e.g., "172.18.0.0/16")
+            </ResponseField>
+            
+            <ResponseField name="Gateway" type="string">
+              Gateway IP address
+            </ResponseField>
+            
+            <ResponseField name="IPRange" type="string">
+              IP range for container allocation
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="Options" type="object">
+          IPAM driver-specific options
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="Containers" type="object">
+      Map of container IDs to container network information
+    </ResponseField>
+    
+    <ResponseField name="Options" type="object">
+      Network driver options (key-value pairs)
+    </ResponseField>
+    
+    <ResponseField name="Labels" type="object">
+      User-defined labels (key-value pairs)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error Responses
+
+<ResponseExample>
+```json 403 Permission Denied
+{
+  "error": "Permission denied"
+}
+```
+
+```json 403 Environment Access Denied
+{
+  "error": "Access denied to this environment"
+}
+```
+
+```json 404 Environment Not Found
+{
+  "error": "Environment not found"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Failed to list networks"
+}
+```
+</ResponseExample>
+
+<RequestExample>
+```bash cURL
+curl -X GET 'https://your-dockhand.com/api/networks?env=1' \
+  -H 'Cookie: session=your-session-cookie'
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-dockhand.com/api/networks?env=1', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const networks = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://your-dockhand.com/api/networks',
+    params={'env': 1},
+    cookies={'session': 'your-session-cookie'}
+)
+
+networks = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+[
+  {
+    "Id": "c7b9a6e5f8d3",
+    "Name": "app-network",
+    "Driver": "bridge",
+    "Scope": "local",
+    "Internal": false,
+    "Attachable": false,
+    "Ingress": false,
+    "EnableIPv6": false,
+    "IPAM": {
+      "Driver": "default",
+      "Config": [
+        {
+          "Subnet": "172.18.0.0/16",
+          "Gateway": "172.18.0.1",
+          "IPRange": "172.18.5.0/24"
+        }
+      ],
+      "Options": {}
+    },
+    "Containers": {
+      "a1b2c3d4e5f6": {
+        "Name": "web-server",
+        "IPv4Address": "172.18.5.10/16",
+        "IPv6Address": "",
+        "MacAddress": "02:42:ac:12:05:0a"
+      }
+    },
+    "Options": {
+      "com.docker.network.bridge.name": "br-app",
+      "com.docker.network.bridge.enable_icc": "true"
+    },
+    "Labels": {
+      "app": "myapp",
+      "environment": "production"
+    }
+  },
+  {
+    "Id": "bridge",
+    "Name": "bridge",
+    "Driver": "bridge",
+    "Scope": "local",
+    "Internal": false,
+    "Attachable": false,
+    "Ingress": false,
+    "EnableIPv6": false,
+    "IPAM": {
+      "Driver": "default",
+      "Config": [
+        {
+          "Subnet": "172.17.0.0/16",
+          "Gateway": "172.17.0.1"
+        }
+      ],
+      "Options": null
+    },
+    "Containers": {},
+    "Options": {},
+    "Labels": {}
+  }
+]
+```
+</ResponseExample>
+
+## Notes
+
+- Returns an empty array if no environment ID is provided
+- Built-in networks (bridge, host, none) are always included in the response
+- Requires authentication to be enabled and the user to have proper permissions
+- Enterprise users must have access to the specified environment
+- Network data is retrieved directly from the Docker API

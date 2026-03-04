@@ -1,0 +1,327 @@
+---
+title: 'Installation'
+description: 'Install Dockhand using Docker Run or Docker Compose'
+icon: 'download'
+---
+
+Dockhand is distributed as a Docker container and can be deployed using Docker Run or Docker Compose. Both SQLite (default) and PostgreSQL databases are supported.
+
+## Prerequisites
+
+Before installing Dockhand, ensure you have:
+
+- Docker Engine 20.10 or later
+- Docker Compose v2.0 or later (for compose-based installations)
+- Access to Docker socket or remote Docker daemon
+- At least 512MB RAM available
+- Port 3000 available (or customize with your preferred port)
+
+<Note>
+  Dockhand runs as a non-root user (UID 1001) by default for security. The container automatically handles Docker socket permissions.
+</Note>
+
+## Quick Install (Docker Run)
+
+The simplest way to get started with Dockhand using the default SQLite database:
+
+```bash
+docker run -d \
+  --name dockhand \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+<Info>
+  Access Dockhand at `http://localhost:3000` after the container starts. The first user to register becomes the admin.
+</Info>
+
+## Docker Compose Installation
+
+### Option 1: SQLite (Default)
+
+Create a `docker-compose.yaml` file:
+
+```yaml docker-compose.yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dockhand
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+
+volumes:
+  dockhand_data:
+```
+
+Deploy with:
+
+```bash
+docker compose up -d
+```
+
+### Option 2: PostgreSQL
+
+For production environments or multi-instance deployments, use PostgreSQL:
+
+```yaml docker-compose-postgresql.yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dockhand
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: dockhand
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  dockhand:
+    image: fnsys/dockhand:latest
+    ports:
+      - 3000:3000
+    environment:
+      DATABASE_URL: postgres://dockhand:changeme@postgres:5432/dockhand
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  dockhand_data:
+```
+
+<Warning>
+  Change the default PostgreSQL password (`changeme`) before deploying to production.
+</Warning>
+
+Deploy with:
+
+```bash
+docker compose -f docker-compose-postgresql.yaml up -d
+```
+
+## Advanced Installation Options
+
+### Custom Port Mapping
+
+To run Dockhand on a different port (e.g., 8080):
+
+```bash
+docker run -d \
+  --name dockhand \
+  -p 8080:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+### Custom User/Group IDs
+
+To run Dockhand with specific UID/GID:
+
+```bash
+docker run -d \
+  --name dockhand \
+  -p 3000:3000 \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+### Docker Socket via Group
+
+If you encounter Docker socket permission issues, add the Docker group:
+
+```bash
+docker run -d \
+  --name dockhand \
+  -p 3000:3000 \
+  --group-add $(stat -c '%g' /var/run/docker.sock) \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+### Remote Docker Host
+
+To manage a remote Docker daemon via TCP:
+
+```bash
+docker run -d \
+  --name dockhand \
+  -p 3000:3000 \
+  -e DOCKER_HOST=tcp://remote-docker:2376 \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+<Note>
+  When using `DOCKER_HOST`, you don't need to mount the Docker socket. Configure TLS certificates via the web UI under Settings > Environments.
+</Note>
+
+### Bind Mount Data Directory
+
+For easier backup and access to the database:
+
+```bash
+docker run -d \
+  --name dockhand \
+  -p 3000:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /opt/dockhand/data:/app/data \
+  fnsys/dockhand:latest
+```
+
+## Verify Installation
+
+<Steps>
+  <Step title="Check Container Status">
+    ```bash
+    docker ps | grep dockhand
+    ```
+    
+    The container should show as "Up" with port 3000 mapped.
+  </Step>
+
+  <Step title="View Logs">
+    ```bash
+    docker logs dockhand
+    ```
+    
+    Look for:
+    - `Docker socket accessible at /var/run/docker.sock`
+    - `Running as user: dockhand`
+    - `Database migrations completed successfully`
+  </Step>
+
+  <Step title="Access Web UI">
+    Open your browser and navigate to:
+    ```
+    http://localhost:3000
+    ```
+    
+    You should see the Dockhand login/registration page.
+  </Step>
+
+  <Step title="Create Admin Account">
+    Register the first user account. This user automatically becomes the administrator with full access.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Docker Socket Permission Denied
+
+If you see "permission denied" errors when accessing Docker:
+
+```bash
+# Find Docker socket group ID
+stat -c '%g' /var/run/docker.sock
+
+# Recreate container with group access
+docker run -d \
+  --name dockhand \
+  --group-add [GID_FROM_ABOVE] \
+  -p 3000:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+### Database Migration Failures
+
+If database migrations fail on startup:
+
+```bash
+# Check logs for specific error
+docker logs dockhand
+
+# Reset database (WARNING: deletes all data)
+docker volume rm dockhand_data
+docker restart dockhand
+```
+
+### Port Already in Use
+
+If port 3000 is already in use:
+
+```bash
+# Use a different port
+docker run -d \
+  --name dockhand \
+  -p 8080:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+### Container Hostname Detection
+
+If the hostname is not detected correctly:
+
+```bash
+docker run -d \
+  --name dockhand \
+  -p 3000:3000 \
+  -e DOCKHAND_HOSTNAME=my-docker-host \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+## Update Dockhand
+
+To update to the latest version:
+
+<Steps>
+  <Step title="Pull Latest Image">
+    ```bash
+    docker pull fnsys/dockhand:latest
+    ```
+  </Step>
+
+  <Step title="Stop Current Container">
+    ```bash
+    docker stop dockhand
+    docker rm dockhand
+    ```
+  </Step>
+
+  <Step title="Start New Container">
+    ```bash
+    docker run -d \
+      --name dockhand \
+      --restart unless-stopped \
+      -p 3000:3000 \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v dockhand_data:/app/data \
+      fnsys/dockhand:latest
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  Database migrations run automatically on startup. Your data is preserved in the `dockhand_data` volume.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+    Complete your first deployment and explore Dockhand features
+  </Card>
+  
+  <Card title="Configuration" icon="sliders" href="/configuration">
+    Configure environment variables, authentication, and advanced settings
+  </Card>
+</CardGroup>

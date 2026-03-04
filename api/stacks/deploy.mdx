@@ -1,0 +1,254 @@
+---
+title: 'Deploy Stack'
+api: 'POST /api/stacks'
+description: 'Create and deploy a new compose stack'
+---
+
+## Query Parameters
+
+<ParamField query="env" type="string" required>
+  Environment ID where the stack will be deployed
+</ParamField>
+
+## Body Parameters
+
+<ParamField body="name" type="string" required>
+  Stack name (must be unique within the environment)
+</ParamField>
+
+<ParamField body="compose" type="string" required>
+  Docker Compose file content (YAML)
+</ParamField>
+
+<ParamField body="start" type="boolean" default={true}>
+  Whether to start the stack immediately. If `false`, only creates the compose file without deploying.
+</ParamField>
+
+<ParamField body="envVars" type="array">
+  Environment variables for the stack
+  
+  <Expandable title="Environment Variable Object">
+    <ParamField body="key" type="string" required>
+      Variable name
+    </ParamField>
+    
+    <ParamField body="value" type="string" required>
+      Variable value
+    </ParamField>
+    
+    <ParamField body="isSecret" type="boolean" default={false}>
+      Whether this is a secret (stored in database, not in .env file)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="rawEnvContent" type="string">
+  Raw .env file content (non-secrets with comments preserved)
+</ParamField>
+
+<ParamField body="composePath" type="string">
+  Custom path for the compose file (for adopted stacks)
+</ParamField>
+
+<ParamField body="envPath" type="string">
+  Custom path for the .env file (for adopted stacks)
+</ParamField>
+
+## Response
+
+This endpoint uses Server-Sent Events (SSE) to stream deployment progress.
+
+<ResponseField name="success" type="boolean">
+  Whether the deployment succeeded
+</ResponseField>
+
+<ResponseField name="started" type="boolean">
+  Whether the stack was started (always `true` if `start` was `true`)
+</ResponseField>
+
+<ResponseField name="output" type="string">
+  Docker Compose output from the deployment
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if deployment failed
+</ResponseField>
+
+## Behavior
+
+- If `start=false`, only creates the compose and env files without running `docker compose up`
+- Secrets (variables with `isSecret=true`) are stored in the database and injected at runtime
+- Non-secret variables are written to the .env file
+- The stack is marked as `internal` source type in the database
+- Deployment uses SSE to keep the connection alive during long operations
+
+<RequestExample>
+
+```bash cURL
+curl -X POST "https://your-dockhand-instance.com/api/stacks?env=1" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: auth_token=your_token" \
+  -d '{
+    "name": "my-app",
+    "compose": "version: '\''3.8'\''\nservices:\n  web:\n    image: nginx:latest\n    ports:\n      - \"8080:80\"\n    environment:\n      - APP_ENV=${APP_ENV}",
+    "start": true,
+    "envVars": [
+      {
+        "key": "APP_ENV",
+        "value": "production",
+        "isSecret": false
+      },
+      {
+        "key": "API_KEY",
+        "value": "secret_key_here",
+        "isSecret": true
+      }
+    ]
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/stacks?env=1', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    name: 'my-app',
+    compose: `version: '3.8'
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    environment:
+      - APP_ENV=\${APP_ENV}`,
+    start: true,
+    envVars: [
+      {
+        key: 'APP_ENV',
+        value: 'production',
+        isSecret: false
+      },
+      {
+        key: 'API_KEY',
+        value: 'secret_key_here',
+        isSecret: true
+      }
+    ]
+  })
+});
+
+// Read SSE stream
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  console.log('SSE event:', text);
+}
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Success
+{
+  "success": true,
+  "started": true,
+  "output": "[+] Running 2/2\n ✔ Network my-app_default  Created\n ✔ Container my-app-web-1  Started"
+}
+```
+
+```json Create Only (start=false)
+{
+  "success": true,
+  "started": false
+}
+```
+
+```json Error
+{
+  "success": false,
+  "error": "Compose file validation failed: invalid YAML syntax",
+  "output": "Error: yaml: line 3: could not find expected ':'"
+}
+```
+
+</ResponseExample>
+
+## Compose File Example
+
+```yaml compose.yaml
+version: '3.8'
+
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    environment:
+      - NGINX_HOST=${DOMAIN}
+      - NGINX_PORT=80
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
+  app:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ./app:/app
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - API_KEY=${API_KEY}
+    command: npm start
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  db-data:
+
+networks:
+  default:
+    name: my-app-network
+```
+
+## Error Responses
+
+### 400 Bad Request
+
+- Stack name is missing or invalid
+- Compose file content is missing or invalid
+- Invalid YAML syntax
+
+### 403 Forbidden
+
+- User lacks `stacks:create` permission
+- User cannot access the specified environment
+
+### 500 Internal Server Error
+
+- Docker daemon error
+- File system error
+- Database error
+
+## Permissions
+
+Requires `stacks:create` permission for the specified environment.

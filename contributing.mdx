@@ -1,0 +1,404 @@
+---
+title: Contributing
+description: Guide for contributing to Dockhand development
+---
+
+## Welcome Contributors
+
+Dockhand welcomes all contributions! Thank you for considering contributing to the project. Whether you're fixing bugs, adding features, improving documentation, or suggesting enhancements, your contributions are valuable.
+
+## How to Contribute
+
+### 1. Fork the Repository
+
+Fork the repository on GitHub to your account:
+
+1. Visit [github.com/Finsys/dockhand](https://github.com/Finsys/dockhand)
+2. Click the "Fork" button in the top-right corner
+3. Clone your forked repository:
+   ```bash
+   git clone https://github.com/your-username/dockhand.git
+   cd dockhand
+   ```
+
+### 2. Create a Branch
+
+Create a new branch for your feature or bug fix:
+
+```bash
+git checkout -b feature/your-feature-name
+# or
+git checkout -b fix/bug-description
+```
+
+Branch naming conventions:
+- `feature/` - New features
+- `fix/` - Bug fixes
+- `docs/` - Documentation updates
+- `refactor/` - Code refactoring
+- `test/` - Test additions or modifications
+
+### 3. Make Your Changes
+
+Make your changes with clear, logical commits:
+
+```bash
+git add .
+git commit -m "Clear description of changes"
+```
+
+Commit message guidelines:
+- Use present tense ("Add feature" not "Added feature")
+- Be concise but descriptive
+- Reference issue numbers when applicable ("Fix #123")
+
+### 4. Push Changes
+
+Push your changes to your forked repository:
+
+```bash
+git push origin feature/your-feature-name
+```
+
+### 5. Open a Pull Request
+
+Open a pull request against the main repository's `main` branch:
+
+1. Go to your fork on GitHub
+2. Click "Pull Request" button
+3. Provide a clear title and description
+4. Link any related issues
+5. Wait for review and feedback
+
+## Development Setup
+
+### Prerequisites
+
+- **Bun**: Latest version from [bun.sh](https://bun.sh/)
+- **Docker**: For running and testing containers
+- **Git**: For version control
+- **Node.js**: 18+ (for tooling compatibility)
+
+### Getting Started
+
+1. **Install Bun** (if not already installed):
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
+
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/your-username/dockhand.git
+   cd dockhand
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   bun install
+   ```
+
+4. **Start the development server**:
+   ```bash
+   bun dev
+   ```
+
+5. **Access the application**:
+   Open your browser and navigate to `http://localhost:5173`
+
+### Environment Setup
+
+Create a `.env` file for local development (optional):
+
+```bash
+# Database
+DATABASE_URL=sqlite:./dev.db
+# or for PostgreSQL:
+# DATABASE_URL=postgresql://user:password@localhost:5432/dockhand
+
+# Docker socket
+DOCKER_SOCKET=/var/run/docker.sock
+
+# Development mode
+NODE_ENV=development
+```
+
+### Project Structure
+
+```
+dockhand/
+├── src/
+│   ├── lib/
+│   │   ├── components/   # Svelte components
+│   │   ├── server/       # Server-side code
+│   │   ├── stores/       # Svelte stores
+│   │   └── utils/        # Utility functions
+│   ├── routes/           # SvelteKit routes
+│   └── app.html          # HTML template
+├── static/               # Static assets
+├── tests/                # Test files
+├── drizzle/              # Database migrations
+└── package.json          # Dependencies
+```
+
+## Tech Stack
+
+Understanding the tech stack will help you contribute effectively:
+
+### Frontend
+- **SvelteKit 2**: Full-stack framework
+- **Svelte 5**: UI framework with runes
+- **shadcn-svelte**: Component library
+- **TailwindCSS**: Utility-first CSS
+
+### Backend
+- **Bun**: JavaScript runtime
+- **SvelteKit API routes**: Backend endpoints
+- **Drizzle ORM**: Database toolkit
+- **Direct Docker API calls**: No SDK dependency
+
+### Database
+- **SQLite**: Default (better-sqlite3)
+- **PostgreSQL**: Production option
+
+### Base OS
+- **Wolfi packages**: Minimal, secure base
+- **apko**: Image building
+- Every package explicitly declared in Dockerfile
+
+## Development Workflow
+
+### Running Tests
+
+```bash
+# Run all tests
+bun test
+
+# Run specific test suite
+bun test:smoke
+bun test:containers
+bun test:stacks
+
+# Run integration tests
+bun test:integration
+
+# Run e2e tests
+bun test:e2e
+```
+
+### Code Quality
+
+```bash
+# Type checking
+bun check
+
+# Watch mode
+bun check:watch
+
+# Build (includes type checking)
+bun build
+```
+
+### Database Migrations
+
+```bash
+# Generate migration
+bun drizzle-kit generate:sqlite
+# or
+bun drizzle-kit generate:pg
+
+# Apply migrations (automatic on startup)
+bun drizzle-kit push:sqlite
+```
+
+### Building Docker Image
+
+```bash
+# Build image
+docker build -t dockhand:dev .
+
+# Run locally
+docker run -d \
+  -p 8033:8033 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --name dockhand-dev \
+  dockhand:dev
+```
+
+## Code Standards
+
+### TypeScript
+- Use TypeScript for all new code
+- Add types for function parameters and return values
+- Avoid `any` types when possible
+
+### Svelte Components
+- Use Svelte 5 runes (`$state`, `$derived`, `$effect`)
+- Keep components focused and reusable
+- Use props destructuring for clarity
+- Add JSDoc comments for exported functions
+
+### Styling
+- Use TailwindCSS utility classes
+- Follow existing component patterns
+- Ensure responsive design
+- Support both light and dark themes
+
+### API Routes
+- Follow REST conventions
+- Return consistent error responses
+- Add request validation
+- Include JSDoc comments
+
+### Database
+- Use Drizzle ORM for queries
+- Create migrations for schema changes
+- Index frequently queried columns
+- Handle errors gracefully
+
+## Testing Guidelines
+
+### Unit Tests
+- Test pure functions and utilities
+- Mock external dependencies
+- Aim for high coverage on critical code
+
+### Integration Tests
+- Test API endpoints
+- Verify database operations
+- Test Docker API interactions
+
+### E2E Tests
+- Test user workflows
+- Use Playwright for browser automation
+- Focus on critical paths
+
+## Pull Request Guidelines
+
+### Before Submitting
+
+- [ ] Code follows project conventions
+- [ ] Tests pass locally
+- [ ] Type checking passes (`bun check`)
+- [ ] Changes are documented
+- [ ] Commit messages are clear
+- [ ] No merge conflicts with main
+
+### PR Description
+
+Include in your PR description:
+
+1. **What**: What changes are included
+2. **Why**: Why these changes are needed
+3. **How**: How the changes work
+4. **Testing**: How you tested the changes
+5. **Screenshots**: If UI changes (before/after)
+6. **Related Issues**: Link related issues
+
+### Review Process
+
+1. Automated checks will run (tests, linting)
+2. Maintainers will review your code
+3. Address feedback and requested changes
+4. Once approved, your PR will be merged
+
+## Contributor License Agreement
+
+When contributing to Dockhand, you will be asked to sign a Contributor License Agreement (CLA) to ensure that all contributions are properly licensed. This helps protect both you and the project.
+
+**The CLA ensures**:
+- Your contributions can be used in the project
+- You retain copyright to your contributions
+- The project can continue under its license
+- Protection for both contributors and users
+
+The agreement can be found at [cla-assistant.io/Finsys/dockhand](https://cla-assistant.io/Finsys/dockhand).
+
+You'll be prompted to sign the CLA automatically when you submit your first pull request.
+
+## Types of Contributions
+
+### Bug Reports
+
+Report bugs via [GitHub Issues](https://github.com/Finsys/dockhand/issues):
+
+- Use the bug report template
+- Include Dockhand version
+- Include Docker version
+- Describe steps to reproduce
+- Include error messages/logs
+- Add screenshots if applicable
+
+### Feature Requests
+
+Suggest features via [GitHub Discussions](https://github.com/Finsys/dockhand/discussions):
+
+- Describe the feature
+- Explain the use case
+- Consider implementation approach
+- Note any potential challenges
+
+### Documentation
+
+Improve documentation:
+
+- Fix typos or unclear explanations
+- Add examples and use cases
+- Improve API documentation
+- Translate to other languages
+
+### Code Contributions
+
+Contribute code:
+
+- Fix bugs
+- Implement features
+- Optimize performance
+- Refactor code
+- Add tests
+
+## Community Guidelines
+
+### Be Respectful
+- Treat everyone with respect
+- Welcome newcomers
+- Be patient with questions
+- Provide constructive feedback
+
+### Be Collaborative
+- Share knowledge
+- Help others
+- Give credit where due
+- Discuss ideas openly
+
+### Be Professional
+- Stay on topic
+- Use clear communication
+- Accept feedback gracefully
+- Focus on the code, not the person
+
+## Getting Help
+
+If you need help:
+
+- Check the [documentation](https://dockhand.pro/manual)
+- Search [GitHub Issues](https://github.com/Finsys/dockhand/issues)
+- Ask in [GitHub Discussions](https://github.com/Finsys/dockhand/discussions)
+- Review [existing PRs](https://github.com/Finsys/dockhand/pulls)
+
+## Recognition
+
+Contributors are recognized:
+
+- In the project README
+- In release notes
+- On the project website
+
+Thank you for contributing to Dockhand!
+
+## Resources
+
+- [GitHub Repository](https://github.com/Finsys/dockhand)
+- [Documentation](https://dockhand.pro/manual)
+- [Issue Tracker](https://github.com/Finsys/dockhand/issues)
+- [Discussions](https://github.com/Finsys/dockhand/discussions)
+- [CLA](https://cla-assistant.io/Finsys/dockhand)

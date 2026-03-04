@@ -1,0 +1,238 @@
+---
+title: 'Update Stack'
+api: 'PUT /api/stacks/{name}/compose'
+description: 'Update a stack compose file and optionally restart'
+---
+
+## Path Parameters
+
+<ParamField path="name" type="string" required>
+  Stack name (URL-encoded)
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="env" type="string" required>
+  Environment ID where the stack exists
+</ParamField>
+
+## Body Parameters
+
+<ParamField body="content" type="string" required>
+  Updated Docker Compose file content (YAML)
+</ParamField>
+
+<ParamField body="restart" type="boolean" default={false}>
+  Whether to restart the stack after updating. If `true`, runs `docker compose up -d --force-recreate`.
+</ParamField>
+
+<ParamField body="composePath" type="string">
+  Custom path for the compose file (for updating file location)
+</ParamField>
+
+<ParamField body="envPath" type="string">
+  Custom path for the .env file (for updating file location)
+</ParamField>
+
+<ParamField body="moveFromDir" type="string">
+  Original directory when moving/relocating stack files
+</ParamField>
+
+<ParamField body="oldComposePath" type="string">
+  Previous compose file path when renaming
+</ParamField>
+
+<ParamField body="oldEnvPath" type="string">
+  Previous env file path when renaming
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Whether the update succeeded
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if update failed
+</ResponseField>
+
+When `restart=true`, the endpoint uses Server-Sent Events (SSE) and includes:
+
+<ResponseField name="output" type="string">
+  Docker Compose output from the restart operation
+</ResponseField>
+
+## Behavior
+
+- If `restart=false`, only saves the compose file without restarting containers
+- If `restart=true`, uses `--force-recreate` to ensure environment variable changes are applied
+- Custom paths allow relocating stack files to different directories
+- The stack must exist and be managed by Dockhand
+
+<RequestExample>
+
+```bash Update Without Restart
+curl -X PUT "https://your-dockhand-instance.com/api/stacks/my-app/compose?env=1" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: auth_token=your_token" \
+  -d '{
+    "content": "version: '\''3.8'\''\nservices:\n  web:\n    image: nginx:alpine\n    ports:\n      - \"8080:80\"",
+    "restart": false
+  }'
+```
+
+```bash Update With Restart
+curl -X PUT "https://your-dockhand-instance.com/api/stacks/my-app/compose?env=1" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: auth_token=your_token" \
+  -d '{
+    "content": "version: '\''3.8'\''\nservices:\n  web:\n    image: nginx:alpine\n    ports:\n      - \"9090:80\"",
+    "restart": true
+  }'
+```
+
+```javascript JavaScript
+// Update without restart
+const response = await fetch('/api/stacks/my-app/compose?env=1', {
+  method: 'PUT',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    content: `version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"`,
+    restart: false
+  })
+});
+
+const result = await response.json();
+
+// Update with restart (SSE stream)
+const restartResponse = await fetch('/api/stacks/my-app/compose?env=1', {
+  method: 'PUT',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    content: `version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "9090:80"`,
+    restart: true
+  })
+});
+
+// Read SSE stream
+const reader = restartResponse.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  console.log('Deploy output:', text);
+}
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Update Without Restart
+{
+  "success": true
+}
+```
+
+```json Update With Restart
+{
+  "success": true,
+  "output": "[+] Running 1/1\n ✔ Container my-app-web-1  Started"
+}
+```
+
+```json Error
+{
+  "success": false,
+  "error": "Compose file content is required"
+}
+```
+
+</ResponseExample>
+
+## Get Current Compose File
+
+Before updating, you can retrieve the current compose file:
+
+```bash
+curl -X GET "https://your-dockhand-instance.com/api/stacks/my-app/compose?env=1" \
+  -H "Cookie: auth_token=your_token"
+```
+
+Response:
+
+```json
+{
+  "content": "version: '3.8'\nservices:\n  web:\n    image: nginx:latest\n    ports:\n      - \"8080:80\"",
+  "stackDir": "/data/stacks/my-app",
+  "composePath": "/data/stacks/my-app/compose.yaml",
+  "envPath": "/data/stacks/my-app/.env",
+  "suggestedEnvPath": "/data/stacks/my-app/.env"
+}
+```
+
+## Relocating Stack Files
+
+To move stack files to a new location:
+
+```javascript
+await fetch('/api/stacks/my-app/compose?env=1', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  credentials: 'include',
+  body: JSON.stringify({
+    content: composeContent,
+    composePath: '/new/location/compose.yaml',
+    envPath: '/new/location/.env',
+    moveFromDir: '/old/location',
+    restart: false
+  })
+});
+```
+
+## Error Responses
+
+### 400 Bad Request
+
+- Compose file content is missing
+- Invalid YAML syntax
+- Invalid file paths
+
+### 403 Forbidden
+
+- User lacks `stacks:edit` permission
+- User cannot access the specified environment
+
+### 404 Not Found
+
+- Stack does not exist
+- Compose file not found
+
+### 500 Internal Server Error
+
+- Docker daemon error
+- File system error
+- Deployment failed
+
+## Permissions
+
+Requires `stacks:edit` permission for the specified environment.

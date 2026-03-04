@@ -1,0 +1,643 @@
+---
+title: LDAP/Active Directory
+description: Authenticate users against LDAP directories (Enterprise)
+---
+
+<Info>
+LDAP authentication requires an **Enterprise Edition** license.
+</Info>
+
+Dockhand integrates with LDAP directories including Active Directory, OpenLDAP, FreeIPA, and other RFC 4511-compliant servers. Users authenticate with their directory credentials, and group memberships map to Dockhand roles.
+
+## Prerequisites
+
+- **Enterprise License** - LDAP is an Enterprise-only feature
+- **LDAP Server** - Active Directory, OpenLDAP, FreeIPA, etc.
+- **Network Access** - Dockhand must reach the LDAP server (port 389 or 636)
+- **Service Account** (recommended) - For user/group searches
+
+## Configuration
+
+### 1. Configure LDAP Provider
+
+Navigate to **Settings > Authentication > LDAP** and click **Add Configuration**.
+
+Or via API:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/ldap \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "name": "Active Directory",
+    "enabled": true,
+    "serverUrl": "ldap://dc.example.com:389",
+    "bindDn": "CN=Service Account,OU=Service Accounts,DC=example,DC=com",
+    "bindPassword": "service_account_password",
+    "baseDn": "DC=example,DC=com",
+    "userFilter": "(sAMAccountName={{username}})",
+    "usernameAttribute": "sAMAccountName",
+    "emailAttribute": "mail",
+    "displayNameAttribute": "displayName",
+    "tlsEnabled": false
+  }'
+```
+
+<ResponseExample>
+```json
+{
+  "id": 1,
+  "name": "Active Directory",
+  "enabled": true,
+  "serverUrl": "ldap://dc.example.com:389",
+  "bindDn": "CN=Service Account,OU=Service Accounts,DC=example,DC=com",
+  "bindPassword": "********",
+  "baseDn": "DC=example,DC=com",
+  "userFilter": "(sAMAccountName={{username}})",
+  "usernameAttribute": "sAMAccountName",
+  "emailAttribute": "mail",
+  "displayNameAttribute": "displayName",
+  "tlsEnabled": false,
+  "createdAt": "2026-03-04T10:00:00Z"
+}
+```
+</ResponseExample>
+
+### Configuration Fields
+
+<ParamField path="name" type="string" required>
+  Display name for the LDAP provider (e.g., "Active Directory", "OpenLDAP")
+</ParamField>
+
+<ParamField path="enabled" type="boolean" default="false">
+  Enable/disable this provider without deleting configuration
+</ParamField>
+
+<ParamField path="serverUrl" type="string" required>
+  LDAP server URL with protocol and port.
+  
+  **Examples:**
+  - `ldap://dc.example.com:389` (plain LDAP)
+  - `ldaps://dc.example.com:636` (LDAP over TLS)
+  - `ldap://10.0.1.10:389`
+</ParamField>
+
+<ParamField path="bindDn" type="string" optional>
+  Service account DN for searching users/groups. Optional if allowing anonymous bind.
+  
+  **Examples:**
+  - Active Directory: `CN=Service Account,OU=Service Accounts,DC=example,DC=com`
+  - OpenLDAP: `cn=admin,dc=example,dc=com`
+</ParamField>
+
+<ParamField path="bindPassword" type="string" optional>
+  Password for the service account (stored encrypted)
+</ParamField>
+
+<ParamField path="baseDn" type="string" required>
+  Base DN for user searches. All users must be under this DN.
+  
+  **Examples:**
+  - `DC=example,DC=com`
+  - `OU=Users,DC=example,DC=com`
+  - `ou=people,dc=example,dc=org`
+</ParamField>
+
+<ParamField path="userFilter" type="string" default="(uid={{username}})">
+  LDAP filter to find users. `{{username}}` is replaced with the login username.
+  
+  **Common Filters:**
+  - Active Directory: `(sAMAccountName={{username}})`
+  - OpenLDAP: `(uid={{username}})`
+  - Email login: `(mail={{username}})`
+  - Multiple: `(|(uid={{username}})(mail={{username}}))`
+</ParamField>
+
+<ParamField path="usernameAttribute" type="string" default="uid">
+  LDAP attribute containing the username
+  
+  **Common Values:**
+  - Active Directory: `sAMAccountName`
+  - OpenLDAP: `uid`
+  - Email: `mail`
+</ParamField>
+
+<ParamField path="emailAttribute" type="string" default="mail">
+  LDAP attribute containing the email address
+</ParamField>
+
+<ParamField path="displayNameAttribute" type="string" default="cn">
+  LDAP attribute containing the full name
+  
+  **Common Values:**
+  - `cn` (common name)
+  - `displayName`
+  - `givenName` (first name only)
+</ParamField>
+
+<ParamField path="groupBaseDn" type="string" optional>
+  Base DN for group searches (required for role mappings)
+  
+  **Examples:**
+  - `OU=Groups,DC=example,DC=com`
+  - `ou=groups,dc=example,dc=org`
+</ParamField>
+
+<ParamField path="groupFilter" type="string" optional>
+  Custom LDAP filter for group membership checks. Available placeholders:
+  - `{{username}}` - Login username
+  - `{{user_dn}}` - User's distinguished name
+  - `{{group}}` - Group DN or name
+  
+  **Examples:**
+  - `(member={{user_dn}})`
+  - `(memberUid={{username}})`
+</ParamField>
+
+<ParamField path="adminGroup" type="string" optional>
+  Group DN or name for admin access. Users in this group receive the Admin role.
+  
+  **Examples:**
+  - Full DN: `CN=Dockhand Admins,OU=Groups,DC=example,DC=com`
+  - Group name: `dockhand-admins` (searches in groupBaseDn)
+</ParamField>
+
+<ParamField path="roleMappings" type="array" optional>
+  Map LDAP groups to Dockhand roles. JSON array of mappings.
+  
+  **Example:**
+  ```json
+  [
+    {"groupDn": "CN=Docker Admins,OU=Groups,DC=example,DC=com", "roleId": 2},
+    {"groupDn": "CN=Docker Viewers,OU=Groups,DC=example,DC=com", "roleId": 3}
+  ]
+  ```
+</ParamField>
+
+<ParamField path="tlsEnabled" type="boolean" default="false">
+  Use LDAP over TLS (LDAPS). Requires server certificate trust.
+</ParamField>
+
+<ParamField path="tlsCa" type="string" optional>
+  PEM-encoded CA certificate for TLS validation. If not provided, system CAs are used.
+</ParamField>
+
+## Testing Configuration
+
+Test your LDAP connection before enabling:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/ldap/1/test \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+{
+  "success": true,
+  "userCount": 142
+}
+```
+</ResponseExample>
+
+This performs a test search for users matching the configured filter (with `*` as username).
+
+## Authentication Flow
+
+### 1. User Submits Credentials
+
+User enters username and password on the login page.
+
+### 2. Search for User DN
+
+Dockhand binds with the service account and searches for the user:
+
+```ldap
+baseDn: DC=example,DC=com
+filter: (sAMAccountAccount=alice)
+attributes: dn, sAMAccountName, mail, displayName
+```
+
+The username is **escaped** to prevent LDAP injection:
+
+```typescript
+function escapeLdapFilterValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\5c')
+    .replace(/\*/g, '\\2a')
+    .replace(/\(/g, '\\28')
+    .replace(/\)/g, '\\29')
+    .replace(/\0/g, '\\00');
+}
+```
+
+This prevents attackers from injecting wildcards or closing parentheses.
+
+### 3. Bind as User
+
+Dockhand attempts to bind as the found user DN with the provided password:
+
+```ldap
+bindDn: CN=Alice Johnson,OU=Users,DC=example,DC=com
+password: user_provided_password
+```
+
+If the bind succeeds, the password is correct.
+
+### 4. Extract User Attributes
+
+Dockhand extracts user information from the LDAP entry:
+
+```javascript
+const username = entry.sAMAccountName;    // "alice"
+const email = entry.mail;                 // "alice@example.com"
+const displayName = entry.displayName;    // "Alice Johnson"
+```
+
+### 5. Check Admin Group Membership
+
+If `adminGroup` is configured, check if the user is a member:
+
+```ldap
+baseDn: CN=Dockhand Admins,OU=Groups,DC=example,DC=com
+scope: base
+filter: (member=CN=Alice Johnson,OU=Users,DC=example,DC=com)
+```
+
+If found, user receives the Admin role.
+
+### 6. Process Role Mappings
+
+For each configured role mapping, check group membership:
+
+```ldap
+# Check membership in "Docker Viewers" group
+baseDn: CN=Docker Viewers,OU=Groups,DC=example,DC=com
+scope: base
+filter: (member=CN=Alice Johnson,OU=Users,DC=example,DC=com)
+```
+
+Assign/remove roles based on current group memberships.
+
+### 7. Create/Update Local User
+
+Dockhand creates or updates a local user account:
+
+```typescript
+let user = await getUserByUsername('alice');
+if (!user) {
+  user = await createUser({
+    username: 'alice',
+    email: 'alice@example.com',
+    displayName: 'Alice Johnson',
+    passwordHash: '', // No local password for LDAP users
+    authProvider: 'ldap:Active Directory'
+  });
+}
+```
+
+### 8. Create Session
+
+Dockhand creates a session and logs the user in:
+
+```typescript
+const session = await createUserSession(user.id, 'ldap', cookies, request);
+```
+
+## Active Directory Examples
+
+### Standard Configuration
+
+```json
+{
+  "name": "Active Directory",
+  "serverUrl": "ldap://dc.example.com:389",
+  "bindDn": "CN=Dockhand Service,OU=Service Accounts,DC=example,DC=com",
+  "bindPassword": "service_password",
+  "baseDn": "DC=example,DC=com",
+  "userFilter": "(sAMAccountName={{username}})",
+  "usernameAttribute": "sAMAccountName",
+  "emailAttribute": "mail",
+  "displayNameAttribute": "displayName",
+  "groupBaseDn": "OU=Groups,DC=example,DC=com",
+  "adminGroup": "CN=Dockhand Admins,OU=Groups,DC=example,DC=com",
+  "tlsEnabled": false
+}
+```
+
+### With StartTLS
+
+```json
+{
+  "name": "Active Directory (StartTLS)",
+  "serverUrl": "ldap://dc.example.com:389",
+  "bindDn": "CN=Dockhand Service,OU=Service Accounts,DC=example,DC=com",
+  "bindPassword": "service_password",
+  "baseDn": "DC=example,DC=com",
+  "userFilter": "(sAMAccountName={{username}})",
+  "usernameAttribute": "sAMAccountName",
+  "emailAttribute": "mail",
+  "displayNameAttribute": "displayName",
+  "tlsEnabled": true
+}
+```
+
+### LDAPS (LDAP over SSL)
+
+```json
+{
+  "name": "Active Directory (LDAPS)",
+  "serverUrl": "ldaps://dc.example.com:636",
+  "bindDn": "CN=Dockhand Service,OU=Service Accounts,DC=example,DC=com",
+  "bindPassword": "service_password",
+  "baseDn": "DC=example,DC=com",
+  "userFilter": "(sAMAccountName={{username}})",
+  "usernameAttribute": "sAMAccountName",
+  "emailAttribute": "mail",
+  "displayNameAttribute": "displayName",
+  "tlsEnabled": true
+}
+```
+
+### Allow Email Login
+
+```json
+{
+  "name": "Active Directory (Email Login)",
+  "serverUrl": "ldap://dc.example.com:389",
+  "bindDn": "CN=Dockhand Service,OU=Service Accounts,DC=example,DC=com",
+  "bindPassword": "service_password",
+  "baseDn": "DC=example,DC=com",
+  "userFilter": "(|(sAMAccountName={{username}})(mail={{username}}))",
+  "usernameAttribute": "sAMAccountName",
+  "emailAttribute": "mail",
+  "displayNameAttribute": "displayName"
+}
+```
+
+Users can log in with either `alice` or `alice@example.com`.
+
+## OpenLDAP Examples
+
+### Standard Configuration
+
+```json
+{
+  "name": "OpenLDAP",
+  "serverUrl": "ldap://ldap.example.com:389",
+  "bindDn": "cn=admin,dc=example,dc=com",
+  "bindPassword": "admin_password",
+  "baseDn": "ou=people,dc=example,dc=com",
+  "userFilter": "(uid={{username}})",
+  "usernameAttribute": "uid",
+  "emailAttribute": "mail",
+  "displayNameAttribute": "cn",
+  "groupBaseDn": "ou=groups,dc=example,dc=com",
+  "adminGroup": "cn=admins,ou=groups,dc=example,dc=com"
+}
+```
+
+### With posixGroup Schema
+
+```json
+{
+  "name": "OpenLDAP (posixGroup)",
+  "serverUrl": "ldap://ldap.example.com:389",
+  "bindDn": "cn=admin,dc=example,dc=com",
+  "bindPassword": "admin_password",
+  "baseDn": "ou=people,dc=example,dc=com",
+  "userFilter": "(uid={{username}})",
+  "usernameAttribute": "uid",
+  "emailAttribute": "mail",
+  "displayNameAttribute": "cn",
+  "groupBaseDn": "ou=groups,dc=example,dc=com",
+  "groupFilter": "(memberUid={{username}})",
+  "adminGroup": "admins"
+}
+```
+
+The `posixGroup` schema uses `memberUid` (username) instead of `member` (DN).
+
+## Admin Role Assignment
+
+Automatically grant admin access based on LDAP group membership:
+
+```json
+{
+  "adminGroup": "CN=Dockhand Admins,OU=Groups,DC=example,DC=com"
+}
+```
+
+Users in this group receive the Admin role in Dockhand.
+
+### Group DN vs. Group Name
+
+You can specify either:
+
+- **Full DN**: `CN=Dockhand Admins,OU=Groups,DC=example,DC=com` (searches at that exact DN)
+- **Group name**: `dockhand-admins` (searches in `groupBaseDn`)
+
+Dockhand detects which format you're using based on the presence of `=` and `,`.
+
+## Role Mappings
+
+Map LDAP groups to Dockhand roles:
+
+### 1. Create Roles
+
+First, create roles in Dockhand (Settings > Roles):
+
+- **Docker Admins** (ID: 2) - Full access
+- **Docker Viewers** (ID: 3) - Read-only access
+- **Dev Environment** (ID: 4) - Access to dev environment only
+
+### 2. Configure Role Mappings
+
+Update LDAP config with role mappings:
+
+```bash
+curl -X PATCH http://localhost:8000/api/auth/ldap/1 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "groupBaseDn": "OU=Groups,DC=example,DC=com",
+    "roleMappings": [
+      {"groupDn": "CN=Docker Admins,OU=Groups,DC=example,DC=com", "roleId": 2},
+      {"groupDn": "CN=Docker Viewers,OU=Groups,DC=example,DC=com", "roleId": 3},
+      {"groupDn": "CN=Dev Team,OU=Groups,DC=example,DC=com", "roleId": 4}
+    ]
+  }'
+```
+
+### How It Works
+
+When a user logs in:
+
+1. Dockhand checks membership in each mapped group
+2. Assigns corresponding Dockhand roles
+3. Removes roles for groups user is no longer in
+4. Syncs roles on every login
+
+This keeps Dockhand permissions in sync with your directory.
+
+## Security Features
+
+### LDAP Injection Prevention
+
+Dockhand escapes special characters per RFC 4515:
+
+```typescript
+function escapeLdapFilterValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\5c')  // Backslash
+    .replace(/\*/g, '\\2a')   // Asterisk (wildcard)
+    .replace(/\(/g, '\\28')   // Left paren
+    .replace(/\)/g, '\\29')   // Right paren
+    .replace(/\0/g, '\\00');  // Null byte
+}
+```
+
+This prevents attackers from injecting malicious LDAP filters.
+
+### Timing Attack Protection
+
+Authentication failures use the same generic error message:
+
+```json
+{"error": "Invalid username or password"}
+```
+
+Whether the user doesn't exist or the password is wrong, the response is identical. This prevents username enumeration.
+
+### TLS Certificate Validation
+
+When `tlsEnabled: true` and `tlsCa` is provided:
+
+```typescript
+const client = new LdapClient({
+  url: config.serverUrl,
+  tlsOptions: {
+    rejectUnauthorized: true,
+    ca: [config.tlsCa]
+  }
+});
+```
+
+Dockhand validates the server certificate against the provided CA.
+
+## Troubleshooting
+
+### Connection Refused
+
+**Error:** `connect ECONNREFUSED`
+
+**Solutions:**
+- Verify the LDAP server is reachable: `telnet dc.example.com 389`
+- Check firewall rules
+- Ensure Docker network allows outbound LDAP
+- Try IP address instead of hostname
+
+### Invalid Credentials (Service Account)
+
+**Error:** `InvalidCredentialsError`
+
+**Solutions:**
+- Verify `bindDn` format matches your directory
+- Test bind with ldapsearch: `ldapsearch -x -D "$BIND_DN" -W -b "$BASE_DN"`
+- Check service account password
+- Ensure service account isn't locked/expired
+
+### No Users Found
+
+**Error:** Test returns `userCount: 0`
+
+**Solutions:**
+- Verify `baseDn` contains users
+- Check `userFilter` matches your schema
+- Test search with ldapsearch:
+  ```bash
+  ldapsearch -x -D "$BIND_DN" -W \
+    -b "$BASE_DN" "(sAMAccountName=*)"
+  ```
+
+### Authentication Failed (User)
+
+**Error:** User gets "Invalid username or password"
+
+**Solutions:**
+- Verify user exists in LDAP
+- Check `userFilter` finds the user
+- Test bind as user:
+  ```bash
+  ldapsearch -x -D "CN=Alice,OU=Users,DC=example,DC=com" -W \
+    -b "DC=example,DC=com" "(objectClass=*)"
+  ```
+- Ensure user account isn't locked/disabled
+
+### Admin Role Not Assigned
+
+**Issue:** User logs in but doesn't have admin access.
+
+**Solutions:**
+1. Verify `adminGroup` is configured
+2. Check user is a member of the group
+3. Verify `groupBaseDn` if using group name (not full DN)
+4. Test group membership search:
+   ```bash
+   ldapsearch -x -D "$BIND_DN" -W \
+     -b "CN=Dockhand Admins,OU=Groups,DC=example,DC=com" \
+     "(member=CN=Alice,OU=Users,DC=example,DC=com)"
+   ```
+
+### TLS/SSL Errors
+
+**Error:** `unable to verify the first certificate`
+
+**Solutions:**
+- Provide CA certificate in `tlsCa` field
+- Use full certificate chain if needed
+- Test TLS with openssl:
+  ```bash
+  openssl s_client -connect dc.example.com:636 \
+    -CAfile ca.crt -showcerts
+  ```
+
+## Performance Tuning
+
+### Connection Pooling
+
+Dockhand creates a new LDAP connection for each authentication. For high-traffic deployments, consider:
+
+1. **Read replica** - Point `serverUrl` to a read-only domain controller
+2. **Load balancer** - Distribute across multiple LDAP servers
+3. **Local caching** - Use SSSD or nscd on the Docker host
+
+### Search Optimization
+
+- **Narrow baseDn** - Search only the OU containing users
+- **Indexed attributes** - Ensure `sAMAccountName` / `uid` is indexed
+- **Limit group checks** - Only map essential groups to roles
+
+## Source Code Reference
+
+- `src/lib/server/auth.ts:488-757` - LDAP authentication logic
+- `src/routes/api/auth/ldap/+server.ts` - CRUD endpoints
+- `src/routes/api/auth/ldap/[id]/test/+server.ts` - Connection testing
+- `src/lib/server/db/schema/pg-schema.ts:205-225` - Database schema
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="RBAC" icon="users-gear" href="/auth/rbac">
+    Configure role-based access control
+  </Card>
+  <Card title="OIDC/SSO" icon="shield-halved" href="/auth/oidc">
+    Add SSO for non-LDAP users
+  </Card>
+  <Card title="Local Users" icon="user" href="/auth/local-users">
+    Manage fallback admin accounts
+  </Card>
+  <Card title="Two-Factor Auth" icon="mobile" href="/auth/2fa">
+    Add 2FA for local admin accounts
+  </Card>
+</CardGroup>

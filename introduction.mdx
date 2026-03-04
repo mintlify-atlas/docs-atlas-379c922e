@@ -1,0 +1,196 @@
+---
+title: Introduction to Dockhand
+description: Modern Docker management application with real-time container orchestration, Compose stacks, and multi-environment support
+---
+
+## What is Dockhand?
+
+Dockhand is a modern, efficient Docker management application that provides real-time container management, Compose stack orchestration, and multi-environment support. Built with a security-first approach, it delivers a lightweight, privacy-focused solution for managing Docker infrastructure.
+
+<Info>
+Dockhand uses direct Docker API calls over Unix socket or HTTP/HTTPS with no external dependencies like dockerode, providing maximum efficiency and control.
+</Info>
+
+## Key Benefits
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Monitoring" icon="chart-line">
+    Live container stats, log streaming, and event tracking with Server-Sent Events (SSE) for instant updates
+  </Card>
+  
+  <Card title="Security-Hardened" icon="shield">
+    Wolfi-based OS with explicitly declared packages, Argon2id password hashing, and HttpOnly cookies with CSRF protection
+  </Card>
+  
+  <Card title="Lightweight & Fast" icon="gauge">
+    Built with Bun runtime and SvelteKit for optimal performance with minimal resource footprint
+  </Card>
+  
+  <Card title="Multi-Environment" icon="server">
+    Manage local and remote Docker hosts with support for Unix sockets, direct connections, and Hawser remote agents
+  </Card>
+</CardGroup>
+
+## Core Features
+
+### Container Management
+
+Comprehensive container lifecycle management with real-time updates:
+
+- **Start, stop, restart** containers with instant feedback
+- **Interactive terminal** access with xterm.js integration
+- **Real-time log streaming** with search and filtering
+- **File browser** for container filesystems with upload/download
+- **Health monitoring** with status tracking and alerts
+- **Auto-update scheduling** with Croner-based job scheduling
+
+<Tip>
+Access container terminals directly from the UI with full TTY support, including resizing and web links.
+</Tip>
+
+### Compose Stack Orchestration
+
+Visual Compose stack management with powerful deployment options:
+
+```typescript
+// Example: Deploy a stack programmatically
+const result = await deployStack({
+  name: 'myapp',
+  compose: composeContent,
+  envId: 1,
+  envVars: { DB_PASSWORD: 'secret' }
+});
+```
+
+Features include:
+- Visual YAML editor with CodeMirror syntax highlighting
+- Git integration with webhook support for auto-sync
+- Environment variable management with encryption
+- Stack status monitoring (running, partial, stopped)
+- Dependency visualization with Cytoscape.js graphs
+
+### Git Integration
+
+Deploy and manage stacks from Git repositories:
+
+- **Auto-sync** from remote repositories on commit
+- **Webhook support** for GitHub/GitLab push events
+- **SSH credentials** with encrypted storage
+- **Branch tracking** with last commit monitoring
+- **Sync status** tracking (pending, syncing, synced, error)
+
+<Note>
+Git credentials are encrypted using AES-256-GCM with unique nonces stored in the database.
+</Note>
+
+### Multi-Environment Support
+
+Manage Docker across different hosts and environments:
+
+```typescript
+// Connection types supported
+type ConnectionType = 
+  | 'socket'           // Local Unix socket
+  | 'direct'           // Direct TCP connection
+  | 'hawser-standard'  // Hawser remote agent
+  | 'hawser-edge';     // Hawser edge deployment
+```
+
+Environments support:
+- **TLS/mTLS** configuration with certificate management
+- **Activity collection** for audit logging
+- **Metrics collection** for resource monitoring
+- **Environment labels** for organization and filtering
+
+### Authentication & Authorization
+
+Enterprise-ready authentication with multiple options:
+
+- **Local users** with Argon2id password hashing
+- **SSO via OIDC** (OAuth 2.0 / OpenID Connect)
+- **LDAP integration** for Active Directory
+- **Role-Based Access Control (RBAC)** for Enterprise edition
+- **MFA support** with OTPAuth and QR code generation
+
+<Warning>
+RBAC features are only available in the Enterprise edition. See the licensing page for details.
+</Warning>
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Development Teams">
+    Streamline local Docker management with visual Compose editing, quick container access, and real-time logs. Perfect for developers who need to manage multiple containers during development.
+  </Accordion>
+  
+  <Accordion title="DevOps & Operations">
+    Monitor production Docker hosts, schedule container updates, track resource usage, and manage stacks across multiple environments. Audit logging provides compliance and security tracking.
+  </Accordion>
+  
+  <Accordion title="Self-Hosted Services">
+    Deploy and manage self-hosted applications with Compose stacks, Git-based deployments, and automated updates. Lightweight footprint makes it ideal for home labs and small servers.
+  </Accordion>
+  
+  <Accordion title="Enterprise Infrastructure">
+    Multi-environment management with RBAC, LDAP/SSO integration, and comprehensive audit logging. Scale from edge devices to data centers with Hawser remote agents.
+  </Accordion>
+</AccordionGroup>
+
+## Technology Stack
+
+Dockhand is built with modern, efficient technologies:
+
+- **Frontend**: SvelteKit 2 with Svelte 5, shadcn-svelte components, TailwindCSS
+- **Backend**: Bun runtime with SvelteKit API routes
+- **Database**: SQLite or PostgreSQL via Drizzle ORM
+- **Docker API**: Direct API calls using Node.js fetch (no dockerode)
+- **Base OS**: Custom Wolfi-based OS built with apko
+
+<Info>
+The custom OS layer is built from scratch using Wolfi packages, with every package explicitly declared for maximum security and minimal attack surface.
+</Info>
+
+## Privacy & Security
+
+Dockhand is designed with privacy and security as core principles:
+
+- **No telemetry** or external data collection
+- **Local-first** architecture with all data stored locally
+- **Encrypted credentials** using AES-256-GCM
+- **Security-hardened OS** with minimal package footprint
+- **Cryptographically secure** session tokens (32-byte random)
+- **CSRF protection** with SameSite=Strict cookies
+
+## Licensing
+
+Dockhand is licensed under the Business Source License 1.1 (BSL 1.1):
+
+- **Free for**: Personal use, internal business use, non-profits, education, evaluation
+- **Not allowed**: Offering Dockhand as a commercial SaaS/hosted service
+- **Converts to Apache 2.0**: On January 1, 2029
+
+<Tip>
+For commercial SaaS use cases, please contact the Dockhand team for licensing options.
+</Tip>
+
+## Getting Started
+
+Ready to start using Dockhand? Check out the installation guide to deploy Dockhand on your infrastructure.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Deploy Dockhand in minutes with Docker Compose
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Configure environments, authentication, and integrations
+  </Card>
+  
+  <Card title="Features" icon="sparkles" href="/features">
+    Explore all features in detail
+  </Card>
+  
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Learn about the technical architecture
+  </Card>
+</CardGroup>

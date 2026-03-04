@@ -1,0 +1,292 @@
+---
+title: "Create Environment"
+api: "POST /api/environments"
+description: "Create a new Docker environment in Dockhand"
+---
+
+## Description
+
+Creates a new Docker environment with the specified configuration. Supports four connection types: local Unix socket, direct TCP connection, Hawser Standard (HTTP proxy), and Hawser Edge (WebSocket reverse proxy).
+
+## Authentication
+
+Requires `environments:create` permission when authentication is enabled.
+
+## Request Body
+
+<ParamField body="name" type="string" required>
+  Unique display name for the environment
+</ParamField>
+
+<ParamField body="connectionType" type="string" default="socket">
+  Type of Docker connection:
+  - `socket` - Local Unix socket
+  - `direct` - Direct TCP connection to Docker API
+  - `hawser-standard` - HTTP proxy via Hawser agent
+  - `hawser-edge` - WebSocket reverse proxy via Hawser agent
+</ParamField>
+
+### Connection Parameters
+
+<ParamField body="host" type="string">
+  Hostname or IP address (required for `direct` and `hawser-standard` types)
+</ParamField>
+
+<ParamField body="port" type="number" default="2375">
+  Port number for Docker API connection
+</ParamField>
+
+<ParamField body="protocol" type="string" default="http">
+  Connection protocol: `http` or `https`
+</ParamField>
+
+<ParamField body="socketPath" type="string" default="/var/run/docker.sock">
+  Unix socket path (used when `connectionType` is `socket`)
+</ParamField>
+
+### TLS Configuration
+
+<ParamField body="tlsCa" type="string">
+  TLS Certificate Authority (CA) certificate in PEM format. Required for self-signed certificates.
+  
+  **Format:** Multi-line PEM string with BEGIN/END markers
+</ParamField>
+
+<ParamField body="tlsCert" type="string">
+  TLS client certificate in PEM format for mutual TLS authentication.
+  
+  **Format:** Multi-line PEM string with BEGIN/END markers
+</ParamField>
+
+<ParamField body="tlsKey" type="string">
+  TLS client private key in PEM format for mutual TLS authentication.
+  
+  **Format:** Multi-line PEM string with BEGIN/END markers
+</ParamField>
+
+<ParamField body="tlsSkipVerify" type="boolean" default="false">
+  Skip TLS certificate verification. **Warning:** Insecure, not recommended for production use.
+</ParamField>
+
+### Hawser Configuration
+
+<ParamField body="hawserToken" type="string">
+  Authentication token for `hawser-standard` connections. Must match the token configured on the Hawser agent.
+</ParamField>
+
+### Display Options
+
+<ParamField body="icon" type="string" default="globe">
+  Icon identifier for UI display
+</ParamField>
+
+<ParamField body="labels" type="string[]">
+  Array of label strings for categorization (maximum 10 labels)
+</ParamField>
+
+### Collection Settings
+
+<ParamField body="collectActivity" type="boolean" default="true">
+  Enable collection of container activity events
+</ParamField>
+
+<ParamField body="collectMetrics" type="boolean" default="true">
+  Enable collection of host metrics (CPU, memory)
+</ParamField>
+
+<ParamField body="highlightChanges" type="boolean" default="true">
+  Highlight recent changes in the UI
+</ParamField>
+
+### Network Information
+
+<ParamField body="publicIp" type="string">
+  Public IP address of the environment host
+</ParamField>
+
+## Response
+
+Returns the created environment object with all fields populated.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the newly created environment
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Name of the environment
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+## Example Requests
+
+### Local Socket Connection
+
+```json
+{
+  "name": "Local Development",
+  "connectionType": "socket",
+  "socketPath": "/var/run/docker.sock",
+  "icon": "laptop",
+  "labels": ["development", "local"]
+}
+```
+
+### Direct Connection with TLS
+
+```json
+{
+  "name": "Production Server",
+  "connectionType": "direct",
+  "host": "docker.example.com",
+  "port": 2376,
+  "protocol": "https",
+  "tlsCa": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIJAKZ...\n-----END CERTIFICATE-----",
+  "tlsCert": "-----BEGIN CERTIFICATE-----\nMIIDYTCCAkmgAwIBAgIJALK...\n-----END CERTIFICATE-----",
+  "tlsKey": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w...\n-----END PRIVATE KEY-----",
+  "tlsSkipVerify": false,
+  "publicIp": "203.0.113.42",
+  "icon": "server",
+  "labels": ["production", "us-east-1"],
+  "collectActivity": true,
+  "collectMetrics": true
+}
+```
+
+### Direct Connection with Self-Signed Certificate
+
+```json
+{
+  "name": "Staging Server",
+  "connectionType": "direct",
+  "host": "staging.internal",
+  "port": 2376,
+  "protocol": "https",
+  "tlsCa": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIJAKZ...\n-----END CERTIFICATE-----",
+  "tlsSkipVerify": false,
+  "icon": "test-tube",
+  "labels": ["staging"]
+}
+```
+
+### Hawser Standard Connection
+
+```json
+{
+  "name": "Remote Docker Host",
+  "connectionType": "hawser-standard",
+  "host": "hawser.example.com",
+  "port": 8080,
+  "protocol": "https",
+  "hawserToken": "hwsr_abc123def456ghi789jkl",
+  "tlsCa": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIJAKZ...\n-----END CERTIFICATE-----",
+  "icon": "network",
+  "labels": ["remote", "hawser"]
+}
+```
+
+### Hawser Edge Connection
+
+```json
+{
+  "name": "Edge Location",
+  "connectionType": "hawser-edge",
+  "icon": "cloud",
+  "labels": ["edge", "remote"],
+  "collectActivity": true,
+  "collectMetrics": true
+}
+```
+
+## Example Response
+
+```json
+{
+  "id": 4,
+  "name": "Production Server",
+  "host": "docker.example.com",
+  "port": 2376,
+  "protocol": "https",
+  "connectionType": "direct",
+  "socketPath": "/var/run/docker.sock",
+  "tlsCa": "-----BEGIN CERTIFICATE-----\n...",
+  "tlsCert": "-----BEGIN CERTIFICATE-----\n...",
+  "tlsKey": "-----BEGIN PRIVATE KEY-----\n...",
+  "tlsSkipVerify": false,
+  "icon": "server",
+  "collectActivity": true,
+  "collectMetrics": true,
+  "highlightChanges": true,
+  "labels": "[\"production\",\"us-east-1\"]",
+  "hawserToken": null,
+  "hawserLastSeen": null,
+  "hawserAgentId": null,
+  "hawserAgentName": null,
+  "hawserVersion": null,
+  "hawserCapabilities": null,
+  "createdAt": "2024-01-20T16:45:00.000Z",
+  "updatedAt": "2024-01-20T16:45:00.000Z"
+}
+```
+
+## Error Responses
+
+<ResponseField name="400 Bad Request" type="object">
+  Invalid request data
+  
+  **Missing name:**
+  ```json
+  {
+    "error": "Name is required"
+  }
+  ```
+  
+  **Missing host for direct/hawser-standard:**
+  ```json
+  {
+    "error": "Host is required for this connection type"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden" type="object">
+  User lacks `environments:create` permission
+  ```json
+  {
+    "error": "Permission denied"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="409 Conflict" type="object">
+  Environment name already exists
+  ```json
+  {
+    "error": "An environment with this name already exists"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error" type="object">
+  Failed to create environment
+  ```json
+  {
+    "error": "Failed to create environment"
+  }
+  ```
+</ResponseField>
+
+## Notes
+
+- Environment names must be unique
+- In Enterprise mode, the creator is automatically assigned the Admin role for the new environment
+- PEM certificates are automatically cleaned (whitespace trimmed) before storage
+- Labels are limited to a maximum of 10 per environment
+- After creation, subprocess collectors are notified to begin monitoring the new environment
+- For `hawser-edge` connections, the environment is created but remains inactive until an agent connects

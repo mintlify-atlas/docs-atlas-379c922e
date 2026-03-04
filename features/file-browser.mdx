@@ -1,0 +1,632 @@
+---
+title: 'File Browser'
+description: 'Browse, edit, and manage files inside containers and Docker volumes with a web-based file manager'
+icon: 'folder-open'
+---
+
+## Overview
+
+Dockhand's file browser provides a web-based interface for managing files inside running containers and Docker volumes. Browse directories, edit files, upload/download content, and manage permissions without shell access.
+
+## Container File Browser
+
+### Browsing Container Files
+
+Access the filesystem of any running container:
+
+```bash
+GET /api/containers/{id}/files?path=/app&env={environmentId}
+```
+
+Response:
+```json
+{
+  "path": "/app",
+  "entries": [
+    {
+      "name": "config",
+      "type": "directory",
+      "size": 4096,
+      "permissions": "drwxr-xr-x",
+      "owner": "root",
+      "group": "root",
+      "modified": "2024-03-04T10:30:00Z"
+    },
+    {
+      "name": "app.js",
+      "type": "file",
+      "size": 15234,
+      "permissions": "-rw-r--r--",
+      "owner": "node",
+      "group": "node",
+      "modified": "2024-03-04T10:25:00Z"
+    }
+  ]
+}
+```
+
+### Implementation
+
+```typescript:src/routes/api/containers/[id]/files/+server.ts
+import { listContainerDirectory } from '$lib/server/docker';
+import { authorize } from '$lib/server/authorize';
+
+export const GET: RequestHandler = async ({ params, url, cookies }) => {
+  const auth = await authorize(cookies);
+
+  const path = url.searchParams.get('path') || '/';
+  const envId = url.searchParams.get('env');
+  const envIdNum = envId ? parseInt(envId) : undefined;
+
+  // Permission check with environment context
+  if (auth.authEnabled && !await auth.can('containers', 'view', envIdNum)) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+
+  try {
+    const result = await listContainerDirectory(
+      params.id,
+      path,
+      envIdNum
+    );
+
+    return json(result);
+  } catch (error: any) {
+    console.error('Error listing container directory:', error);
+    return json({ error: error.message || 'Failed to list directory' }, { status: 500 });
+  }
+};
+```
+
+## File Operations
+
+### Reading File Content
+
+Read the contents of a text file:
+
+```bash
+GET /api/containers/{id}/files/content?path=/app/config.json&env={environmentId}
+```
+
+Response:
+```json
+{
+  "content": "{\n  \"port\": 3000,\n  \"host\": \"0.0.0.0\"\n}",
+  "path": "/app/config.json"
+}
+```
+
+### Writing File Content
+
+Update or create a file:
+
+```bash
+PUT /api/containers/{id}/files/content?path=/app/config.json&env={environmentId}
+```
+
+```json
+{
+  "content": "{\n  \"port\": 8080,\n  \"host\": \"0.0.0.0\"\n}"
+}
+```
+
+### File Size Limits
+
+```typescript:src/routes/api/containers/[id]/files/content/+server.ts
+// Max file size for reading/writing (1MB)
+const MAX_FILE_SIZE = 1024 * 1024;
+
+export const GET: RequestHandler = async ({ params, url, cookies }) => {
+  const content = await readContainerFile(
+    params.id,
+    path,
+    envIdNum
+  );
+
+  // Check if content is too large
+  if (content.length > MAX_FILE_SIZE) {
+    return json({ error: 'File is too large to edit (max 1MB)' }, { status: 413 });
+  }
+
+  return json({ content, path });
+};
+```
+
+### Creating Files/Directories
+
+```bash
+POST /api/containers/{id}/files/create?path=/app/newdir&env={environmentId}
+```
+
+```json
+{
+  "type": "directory",
+  "name": "logs"
+}
+```
+
+Or create a file:
+
+```json
+{
+  "type": "file",
+  "name": "config.yaml",
+  "content": "port: 8080\nhost: 0.0.0.0"
+}
+```
+
+### Deleting Files
+
+```bash
+DELETE /api/containers/{id}/files/delete?path=/app/old-file.txt&env={environmentId}
+```
+
+### Renaming Files
+
+```bash
+POST /api/containers/{id}/files/rename?path=/app/old-name.txt&env={environmentId}
+```
+
+```json
+{
+  "newName": "new-name.txt"
+}
+```
+
+### Changing Permissions
+
+```bash
+POST /api/containers/{id}/files/chmod?path=/app/script.sh&env={environmentId}
+```
+
+```json
+{
+  "mode": "755"
+}
+```
+
+## File Upload/Download
+
+### Uploading Files
+
+Upload one or more files to a container:
+
+```bash
+POST /api/containers/{id}/files/upload?path=/app/uploads&env={environmentId}
+```
+
+The implementation creates a TAR archive for Docker API:
+
+```typescript:src/routes/api/containers/[id]/files/upload/+server.ts
+/**
+ * Create a simple tar archive from a single file
+ * TAR format: 512-byte header followed by file content padded to 512 bytes
+ */
+function createTarArchive(filename: string, content: Uint8Array): Uint8Array {
+  // TAR header is 512 bytes
+  const header = new Uint8Array(512);
+  const encoder = new TextEncoder();
+
+  // File name (100 bytes)
+  const nameBytes = encoder.encode(filename.slice(0, 99));
+  header.set(nameBytes, 0);
+
+  // File mode (8 bytes) - 0644
+  header.set(encoder.encode('0000644\0'), 100);
+
+  // File size in octal (12 bytes)
+  const sizeOctal = content.length.toString(8).padStart(11, '0');
+  header.set(encoder.encode(sizeOctal + '\0'), 124);
+
+  // Calculate checksum
+  let checksum = 0;
+  for (let i = 0; i < 512; i++) {
+    checksum += header[i];
+  }
+  const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
+  header.set(encoder.encode(checksumOctal), 148);
+
+  // Combine header, content, and padding
+  const paddingSize = (512 - (content.length % 512)) % 512;
+  const padding = new Uint8Array(paddingSize);
+  const endMarker = new Uint8Array(1024);
+
+  const totalSize = header.length + content.length + paddingSize + endMarker.length;
+  const tar = new Uint8Array(totalSize);
+
+  let offset = 0;
+  tar.set(header, offset);
+  offset += header.length;
+  tar.set(content, offset);
+  offset += content.length;
+  tar.set(padding, offset);
+  offset += paddingSize;
+  tar.set(endMarker, offset);
+
+  return tar;
+}
+
+export const POST: RequestHandler = async ({ params, url, request, cookies }) => {
+  const formData = await request.formData();
+  const files = formData.getAll('files') as File[];
+
+  const uploaded: string[] = [];
+  const errors: string[] = [];
+
+  for (const file of files) {
+    try {
+      const content = new Uint8Array(await file.arrayBuffer());
+      const tar = createTarArchive(file.name, content);
+
+      await putContainerArchive(
+        params.id,
+        path,
+        tar,
+        envId ? parseInt(envId) : undefined
+      );
+
+      uploaded.push(file.name);
+    } catch (err: any) {
+      errors.push(`${file.name}: ${err.message}`);
+    }
+  }
+
+  return json({
+    success: true,
+    uploaded,
+    errors: errors.length > 0 ? errors : undefined
+  });
+};
+```
+
+### Downloading Files
+
+```bash
+GET /api/containers/{id}/files/download?path=/app/logs/app.log&env={environmentId}
+```
+
+Returns the file as a download with appropriate `Content-Disposition` header.
+
+## Volume File Browser
+
+### Browsing Volume Files
+
+Browse files in a Docker volume:
+
+```bash
+GET /api/volumes/{name}/browse?path=/data&env={environmentId}
+```
+
+Response:
+```json
+{
+  "path": "/data",
+  "entries": [
+    {
+      "name": "database",
+      "type": "directory",
+      "size": 4096,
+      "permissions": "drwxr-xr-x"
+    },
+    {
+      "name": "backup.sql",
+      "type": "file",
+      "size": 104857600,
+      "permissions": "-rw-r--r--"
+    }
+  ],
+  "usage": [
+    {
+      "containerId": "abc123",
+      "containerName": "postgres",
+      "mountPath": "/var/lib/postgresql/data"
+    }
+  ],
+  "isInUse": true,
+  "helperId": "dockhand-volume-browse-abc123"
+}
+```
+
+### Volume Browser Implementation
+
+Volumes are accessed through temporary helper containers:
+
+```typescript:src/routes/api/volumes/[name]/browse/+server.ts
+export const GET: RequestHandler = async ({ params, url, cookies }) => {
+  const auth = await authorize(cookies);
+
+  const envId = url.searchParams.get('env');
+  const envIdNum = envId ? parseInt(envId) : undefined;
+  const path = url.searchParams.get('path') || '/';
+
+  // Permission check
+  if (auth.authEnabled && !await auth.can('volumes', 'inspect', envIdNum)) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+
+  try {
+    // Check if volume is in use by any containers
+    const usage = await getVolumeUsage(params.name, envIdNum);
+    const isInUse = usage.length > 0;
+
+    // Mount read-only if in use, otherwise writable
+    const result = await listVolumeDirectory(params.name, path, envIdNum, isInUse);
+
+    // Helper container is cached and reused for subsequent requests
+    // Cache TTL handles cleanup automatically
+
+    return json({
+      path: result.path,
+      entries: result.entries,
+      usage,
+      isInUse,
+      // Expose helper container ID so frontend can use container file endpoints
+      helperId: result.containerId
+    });
+  } catch (error: any) {
+    console.error('Failed to browse volume:', error);
+
+    if (error.message?.includes('No such file or directory')) {
+      return json({ error: 'Directory not found', path }, { status: 404 });
+    }
+
+    return json({
+      error: 'Failed to browse volume',
+      details: error.message || String(error)
+    }, { status: 500 });
+  }
+};
+```
+
+### Helper Container Lifecycle
+
+1. **On first browse request**: Create a temporary container with volume mounted
+2. **Subsequent requests**: Reuse the same container (cached for 30 minutes)
+3. **Automatic cleanup**: Helper containers are removed after TTL expires
+4. **Manual cleanup**: Helper containers can be released immediately
+
+### Release Helper Container
+
+```bash
+POST /api/volumes/{name}/browse/release?env={environmentId}
+```
+
+Manually release the helper container to free resources immediately.
+
+## File Editor Integration
+
+The frontend integrates a code editor (Monaco/CodeMirror) for editing files:
+
+### Supported File Types
+
+- **Configuration**: JSON, YAML, TOML, INI
+- **Code**: JavaScript, TypeScript, Python, Go, Rust, Java
+- **Markup**: HTML, XML, Markdown
+- **Styles**: CSS, SCSS, LESS
+- **Shell**: Bash, Zsh, Shell scripts
+- **Logs**: Plain text with syntax highlighting
+
+### Editor Features
+
+- Syntax highlighting
+- Auto-completion
+- Line numbers
+- Search and replace
+- Multiple cursor support
+- Bracket matching
+- Code folding
+- Diff view (compare with previous version)
+
+## Security Considerations
+
+### Permission Requirements
+
+```typescript
+// View files: requires 'containers:view' permission
+GET /api/containers/{id}/files
+
+// Edit files: requires 'containers:exec' permission
+PUT /api/containers/{id}/files/content
+POST /api/containers/{id}/files/upload
+DELETE /api/containers/{id}/files/delete
+```
+
+### Container Requirements
+
+File operations only work on **running** containers:
+
+```typescript
+if (container.state !== 'running') {
+  return json({ error: 'Container is not running' }, { status: 400 });
+}
+```
+
+### Read-Only Volumes
+
+Volumes mounted read-only cannot be modified:
+
+```yaml
+services:
+  app:
+    volumes:
+      - data:/app/data:ro  # Read-only mount
+```
+
+Attempting to write will fail:
+```json
+{
+  "error": "Read-only file system"
+}
+```
+
+## Common Use Cases
+
+### Editing Configuration
+
+1. Navigate to container's config directory
+2. Open configuration file
+3. Edit in web-based editor
+4. Save changes
+5. Restart container if needed
+
+### Viewing Logs
+
+1. Browse to log directory
+2. Open log file
+3. Search for errors or patterns
+4. Download for local analysis
+
+### Uploading Certificates
+
+1. Navigate to certificate directory (e.g., `/etc/ssl/certs`)
+2. Upload new certificate files
+3. Set appropriate permissions (644 for certs, 600 for keys)
+4. Reload or restart service
+
+### Backup Configuration
+
+1. Browse to application directory
+2. Download configuration files
+3. Store locally or in version control
+4. Restore by uploading when needed
+
+### Debugging
+
+1. Check application files for corruption
+2. Verify configuration syntax
+3. Inspect generated files
+4. Compare with known good versions
+
+## Best Practices
+
+### File Operations
+
+1. **Always backup** before making changes
+2. **Test changes** in non-production first
+3. **Use version control** for configuration files
+4. **Set proper permissions** after uploads
+5. **Validate syntax** before saving configs
+
+### Volume Management
+
+1. **Release helper containers** when done browsing
+2. **Use read-only mode** for volumes in use
+3. **Avoid large file operations** (>100MB) through browser
+4. **Download volumes** for backup instead of browsing
+
+### Security
+
+1. **Limit file browser access** to authorized users
+2. **Audit file changes** through activity logs
+3. **Never edit files** containing secrets through browser
+4. **Use proper file permissions** (644 for files, 755 for scripts)
+5. **Rotate secrets** after viewing in file browser
+
+## Limitations
+
+### File Size Limits
+
+- **Reading**: 1MB maximum for text files
+- **Uploading**: Limited by browser and server settings
+- **Editing**: Large files may cause browser performance issues
+
+### Container State
+
+- Requires **running** containers
+- Cannot access stopped containers
+- Cannot access containers without shell
+
+### File System Support
+
+- Works with standard Linux filesystems
+- May have issues with special filesystems (proc, sys, dev)
+- Binary files display as download only
+
+## Troubleshooting
+
+### Permission Denied
+
+```json
+{"error": "Permission denied to read this file"}
+```
+
+**Solutions**:
+1. Check container user permissions
+2. Use `chmod` endpoint to fix permissions
+3. Exec into container as root if needed
+
+### Container Not Running
+
+```json
+{"error": "Container is not running"}
+```
+
+**Solution**: Start the container before accessing files
+
+### File Too Large
+
+```json
+{"error": "File is too large to edit (max 1MB)"}
+```
+
+**Solutions**:
+1. Download file for local editing
+2. Use terminal/exec for large file operations
+3. Split file into smaller chunks
+
+### Volume Browse Timeout
+
+```json
+{"error": "Failed to browse volume"}
+```
+
+**Solutions**:
+1. Check if volume exists
+2. Release and retry helper container
+3. Verify volume is not corrupted
+
+## API Reference
+
+### Container Files
+
+```bash
+# List directory
+GET /api/containers/{id}/files?path={path}&env={envId}
+
+# Read file content
+GET /api/containers/{id}/files/content?path={path}&env={envId}
+
+# Write file content
+PUT /api/containers/{id}/files/content?path={path}&env={envId}
+
+# Upload files
+POST /api/containers/{id}/files/upload?path={path}&env={envId}
+
+# Download file
+GET /api/containers/{id}/files/download?path={path}&env={envId}
+
+# Create file/directory
+POST /api/containers/{id}/files/create?path={path}&env={envId}
+
+# Delete file
+DELETE /api/containers/{id}/files/delete?path={path}&env={envId}
+
+# Rename file
+POST /api/containers/{id}/files/rename?path={path}&env={envId}
+
+# Change permissions
+POST /api/containers/{id}/files/chmod?path={path}&env={envId}
+```
+
+### Volume Files
+
+```bash
+# Browse volume
+GET /api/volumes/{name}/browse?path={path}&env={envId}
+
+# Read file from volume (via helper container)
+GET /api/volumes/{name}/browse/content?path={path}&env={envId}
+
+# Release helper container
+POST /api/volumes/{name}/browse/release?env={envId}
+```

@@ -1,0 +1,437 @@
+---
+title: Local Users
+description: Manage local user accounts with password authentication
+---
+
+Local users authenticate with a username and password stored in Dockhand's database. This is the simplest authentication method and works without external dependencies.
+
+## Creating Users
+
+### Via Web UI
+
+1. Navigate to **Settings > Users**
+2. Click **Add User**
+3. Fill in user details:
+   - **Username** - Unique identifier (required)
+   - **Password** - Minimum 8 characters (required)
+   - **Email** - For notifications and password recovery
+   - **Display Name** - Full name or alias
+4. Click **Create User**
+
+### Via API
+
+```bash
+curl -X POST http://localhost:8000/api/users \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "username": "alice",
+    "password": "SecureP@ssw0rd123",
+    "email": "alice@example.com",
+    "displayName": "Alice Johnson"
+  }'
+```
+
+<ResponseExample>
+```json
+{
+  "id": 2,
+  "username": "alice",
+  "email": "alice@example.com",
+  "displayName": "Alice Johnson",
+  "isAdmin": false,
+  "isActive": true,
+  "createdAt": "2026-03-04T10:30:00Z"
+}
+```
+</ResponseExample>
+
+## Password Requirements
+
+Dockhand enforces these password requirements:
+
+- **Minimum Length**: 8 characters
+- **Recommended**: 12+ characters with mixed case, numbers, and symbols
+- **Hashing Algorithm**: Argon2id with these parameters:
+  - Memory cost: 64 MB (65536 KiB)
+  - Time cost: 3 iterations
+  - Parallelism: 1 thread
+  - Hash length: 32 bytes (256 bits)
+
+### Password Storage Format
+
+Passwords are stored in PHC format:
+
+```
+$argon2id$v=19$m=65536,t=3,p=1$[salt]$[hash]
+```
+
+This format is compatible with standard Argon2 implementations.
+
+## User Management
+
+### List Users
+
+```bash
+curl http://localhost:8000/api/users \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "email": "admin@example.com",
+    "displayName": "System Administrator",
+    "mfaEnabled": true,
+    "isAdmin": true,
+    "isActive": true,
+    "isSso": false,
+    "authProvider": "local",
+    "lastLogin": "2026-03-04T09:15:22Z",
+    "createdAt": "2026-01-15T08:00:00Z"
+  },
+  {
+    "id": 2,
+    "username": "alice",
+    "email": "alice@example.com",
+    "displayName": "Alice Johnson",
+    "mfaEnabled": false,
+    "isAdmin": false,
+    "isActive": true,
+    "isSso": false,
+    "authProvider": "local",
+    "lastLogin": "2026-03-04T08:45:10Z",
+    "createdAt": "2026-02-10T14:20:00Z"
+  }
+]
+```
+</ResponseExample>
+
+### Update User
+
+```bash
+curl -X PATCH http://localhost:8000/api/users/2 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "email": "alice.johnson@example.com",
+    "displayName": "Alice M. Johnson"
+  }'
+```
+
+### Change Password
+
+Users can change their own password:
+
+```bash
+curl -X PATCH http://localhost:8000/api/users/2 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "currentPassword": "OldP@ssw0rd",
+    "password": "NewSecureP@ssw0rd456"
+  }'
+```
+
+Admins can reset passwords without knowing the current one:
+
+```bash
+curl -X PATCH http://localhost:8000/api/users/2 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "password": "NewP@ssw0rd789"
+  }'
+```
+
+### Disable User
+
+Disable a user account (preserves data):
+
+```bash
+curl -X PATCH http://localhost:8000/api/users/2 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{"isActive": false}'
+```
+
+Disabled users cannot log in but their sessions remain active until they expire.
+
+### Delete User
+
+Permanently delete a user account:
+
+```bash
+curl -X DELETE http://localhost:8000/api/users/2 \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<Warning>
+Deleting a user removes all their data including audit logs, preferences, and role assignments. This action cannot be undone.
+</Warning>
+
+## Login Flow
+
+### Basic Login
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "alice",
+    "password": "SecureP@ssw0rd123"
+  }'
+```
+
+<ResponseExample>
+```json
+{
+  "success": true,
+  "user": {
+    "id": 2,
+    "username": "alice",
+    "email": "alice@example.com",
+    "displayName": "Alice Johnson",
+    "isAdmin": false
+  }
+}
+```
+</ResponseExample>
+
+### Login with 2FA
+
+If the user has 2FA enabled, the initial login returns:
+
+```json
+{
+  "requiresMfa": true
+}
+```
+
+Then submit the TOTP code:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "alice",
+    "password": "SecureP@ssw0rd123",
+    "mfaToken": "123456"
+  }'
+```
+
+See [Two-Factor Authentication](/auth/2fa) for details.
+
+## Rate Limiting
+
+Dockhand protects against brute force attacks with rate limiting:
+
+- **Threshold**: 5 failed attempts per IP + username combination
+- **Window**: 15 minutes
+- **Lockout**: 15 minutes after threshold reached
+- **Response**: HTTP 429 with `Retry-After` header
+
+### Rate Limit Response
+
+```json
+{
+  "error": "Too many login attempts. Please try again in 847 seconds."
+}
+```
+
+Rate limits are stored in-memory and reset on server restart.
+
+## Session Management
+
+### Session Token
+
+After successful login, Dockhand sets a session cookie:
+
+```http
+Set-Cookie: dockhand_session=BASE64URL_TOKEN; 
+  Path=/; 
+  HttpOnly; 
+  Secure; 
+  SameSite=Strict; 
+  Max-Age=86400
+```
+
+- **Name**: `dockhand_session`
+- **Token Format**: 32-byte random value, base64url encoded (256 bits entropy)
+- **HttpOnly**: Prevents JavaScript access (XSS protection)
+- **Secure**: Only sent over HTTPS (production)
+- **SameSite=Strict**: Prevents CSRF attacks
+- **Max-Age**: Configurable (default 24 hours)
+
+### Check Session
+
+```bash
+curl http://localhost:8000/api/auth/session \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+{
+  "authenticated": true,
+  "user": {
+    "id": 2,
+    "username": "alice",
+    "email": "alice@example.com",
+    "displayName": "Alice Johnson",
+    "isAdmin": false
+  },
+  "expiresAt": "2026-03-05T09:15:22Z"
+}
+```
+</ResponseExample>
+
+### Logout
+
+```bash
+curl -X POST http://localhost:8000/api/auth/logout \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+This deletes the session from the database and clears the cookie.
+
+## Security Considerations
+
+### Timing Attack Protection
+
+Dockhand prevents username enumeration via timing attacks:
+
+```typescript
+// Always hash a dummy password even if user doesn't exist
+if (!user) {
+  await hashPassword('dummy');
+  return { error: 'Invalid username or password' };
+}
+```
+
+This ensures authentication failures take the same time whether the username exists or not.
+
+### Password Hash Migration
+
+If you change the Argon2 parameters, existing hashes remain valid. Users are not required to reset passwords.
+
+### Session Token Security
+
+Session tokens are:
+- Generated using `crypto.randomBytes()` (CSPRNG)
+- 32 bytes = 256 bits of entropy
+- Base64url encoded for cookie safety
+- Stored as plain text in database (lookup key)
+- Not encrypted (entropy makes guessing infeasible)
+
+## First User Setup
+
+When authentication is enabled but no admin exists, Dockhand allows creating the first user without authentication:
+
+```bash
+# This works only when no admin users exist
+curl -X POST http://localhost:8000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "password": "ChangeMe123!",
+    "email": "admin@example.com"
+  }'
+```
+
+The first user automatically:
+- Receives the Admin role
+- Can create additional users
+- Is logged in automatically (if `authEnabled: true`)
+
+This special case is implemented in `hooks.server.ts:270`:
+
+```typescript
+const noAdminSetupMode = !(await hasAdminUser());
+if (noAdminSetupMode && event.url.pathname === '/api/users' && 
+    event.request.method === 'POST') {
+  return compressResponse(event.request, await resolve(event));
+}
+```
+
+## Disabling Local Login
+
+For SSO-only deployments, disable local username/password authentication:
+
+```bash
+docker run -e DISABLE_LOCAL_LOGIN=true dockhand/dockhand:latest
+```
+
+This:
+- Removes "Local" from the login provider list
+- Rejects POST requests to `/api/auth/login` with `provider: local`
+- Forces all users to authenticate via OIDC or LDAP
+- Prevents password-based attacks
+
+<Warning>
+Keep at least one admin account with a known password as a backup before enabling this setting.
+</Warning>
+
+## Database Schema
+
+Local users are stored in the `users` table:
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT,
+  password_hash TEXT NOT NULL,
+  display_name TEXT,
+  avatar TEXT,
+  auth_provider TEXT DEFAULT 'local',
+  mfa_enabled BOOLEAN DEFAULT FALSE,
+  mfa_secret TEXT,  -- JSON: {secret, backupCodes}
+  is_active BOOLEAN DEFAULT TRUE,
+  last_login TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+Sessions are stored in the `sessions` table:
+
+```sql
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## Source Code Reference
+
+Key implementation files:
+
+- `src/lib/server/auth.ts` - Core authentication logic
+- `src/routes/api/auth/login/+server.ts` - Login endpoint
+- `src/routes/api/users/+server.ts` - User management CRUD
+- `src/hooks.server.ts` - Session validation middleware
+- `src/lib/server/authorize.ts` - Permission checks
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Two-Factor Auth" icon="mobile" href="/auth/2fa">
+    Add TOTP-based 2FA to user accounts
+  </Card>
+  <Card title="OIDC/SSO" icon="shield-halved" href="/auth/oidc">
+    Integrate with your Identity Provider
+  </Card>
+  <Card title="RBAC" icon="users-gear" href="/auth/rbac">
+    Configure role-based access control (Enterprise)
+  </Card>
+  <Card title="LDAP" icon="building" href="/auth/ldap">
+    Connect to Active Directory (Enterprise)
+  </Card>
+</CardGroup>

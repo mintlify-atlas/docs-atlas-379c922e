@@ -1,0 +1,483 @@
+---
+title: 'Git Integration'
+description: 'Automate stack deployments with Git repository synchronization, webhooks, and continuous deployment'
+icon: 'git-branch'
+---
+
+## Overview
+
+Dockhand's Git integration enables automatic deployment of Docker Compose stacks directly from Git repositories. Connect to GitHub, GitLab, or any Git server and automatically sync changes, trigger deployments via webhooks, and maintain version-controlled infrastructure.
+
+## Key Features
+
+- **Repository Management**: Connect to any Git repository (GitHub, GitLab, Bitbucket, self-hosted)
+- **Automatic Sync**: Schedule periodic syncs to check for updates
+- **Webhook Support**: Instant deployments triggered by Git push events
+- **Credential Management**: Secure storage for SSH keys and access tokens
+- **Multi-Stack Support**: Deploy multiple stacks from a single repository
+- **Branch Selection**: Deploy from any branch (main, develop, feature branches)
+- **Environment Files**: Automatic `.env` file handling from repository
+
+## Repository Configuration
+
+### Creating a Git Repository Connection
+
+1. Navigate to **Git** → **Repositories**
+2. Click **Add Repository**
+3. Configure the repository settings:
+
+```json
+{
+  "name": "my-app",
+  "url": "https://github.com/username/repo.git",
+  "branch": "main",
+  "composePath": "compose.yaml",
+  "credentialId": 1
+}
+```
+
+### Authentication Methods
+
+Dockhand supports multiple authentication methods:
+
+#### SSH Key Authentication
+```typescript
+// Recommended for private repositories
+{
+  "authType": "ssh",
+  "sshPrivateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
+  "sshPassphrase": "optional-passphrase"
+}
+```
+
+#### HTTPS with Token
+```typescript
+{
+  "authType": "https",
+  "username": "git",
+  "password": "ghp_yourGitHubToken"
+}
+```
+
+#### Public Repositories
+```typescript
+{
+  "authType": "none"
+}
+```
+
+## Git Stacks
+
+### What are Git Stacks?
+
+Git stacks are Docker Compose stacks that are automatically deployed from a Git repository. They maintain synchronization with the repository and can be configured for automatic updates.
+
+### Creating a Git Stack
+
+```bash
+POST /api/git/stacks
+```
+
+```json
+{
+  "stackName": "production-app",
+  "repositoryId": 1,
+  "environmentId": 1,
+  "composePath": "docker-compose.prod.yml",
+  "envFilePath": ".env.production",
+  "autoUpdate": true,
+  "autoUpdateCron": "0 3 * * *"
+}
+```
+
+### Stack Deployment Process
+
+When a Git stack is deployed, Dockhand:
+
+1. **Clones or pulls** the latest changes from the repository
+2. **Checks out** the specified branch
+3. **Loads environment variables** from the `.env` file (if specified)
+4. **Applies stack variables** from Dockhand's variable management
+5. **Runs docker compose up** with the specified compose file
+6. **Records deployment logs** for audit and troubleshooting
+
+## Webhook Integration
+
+### GitHub Webhooks
+
+1. Get your webhook URL from Dockhand:
+   ```
+   https://dockhand.example.com/api/git/webhook/{repositoryId}
+   ```
+
+2. In your GitHub repository, go to **Settings** → **Webhooks** → **Add webhook**
+
+3. Configure the webhook:
+   - **Payload URL**: Your Dockhand webhook URL
+   - **Content type**: `application/json`
+   - **Secret**: Generate a secret in Dockhand and paste it here
+   - **Events**: Select "Just the push event"
+
+### GitLab Webhooks
+
+1. In your GitLab project, go to **Settings** → **Webhooks**
+
+2. Configure the webhook:
+   - **URL**: Your Dockhand webhook URL
+   - **Secret token**: Your Dockhand webhook secret
+   - **Trigger**: Check "Push events"
+   - **SSL verification**: Enable for production
+
+### Webhook Security
+
+Dockhand verifies webhook signatures to ensure authenticity:
+
+```typescript:src/routes/api/git/webhook/[id]/+server.ts
+function verifySignature(payload: string, signature: string | null, secret: string): boolean {
+  if (!signature) return false;
+
+  // GitHub: sha256=<hash>
+  if (signature.startsWith('sha256=')) {
+    const expectedSignature = 'sha256=' + crypto
+      .createHmac('sha256', secret)
+      .update(payload)
+      .digest('hex');
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  }
+
+  // GitLab: direct token comparison
+  return signature === secret;
+}
+```
+
+## Automatic Sync
+
+### Scheduled Synchronization
+
+Configure automatic sync with cron expressions:
+
+```typescript
+// Check for updates every 6 hours
+{
+  "autoUpdate": true,
+  "autoUpdateCron": "0 */6 * * *"
+}
+
+// Daily at 3 AM
+{
+  "autoUpdate": true,
+  "autoUpdateCron": "0 3 * * *"
+}
+
+// Every 15 minutes
+{
+  "autoUpdate": true,
+  "autoUpdateCron": "*/15 * * * *"
+}
+```
+
+### Sync Behavior
+
+The scheduler implements intelligent sync behavior:
+
+```typescript:src/lib/server/scheduler/tasks/git-stack-sync.ts
+export async function runGitStackSync(
+  stackId: number,
+  stackName: string,
+  environmentId: number | null | undefined,
+  triggeredBy: ScheduleTrigger
+): Promise<void> {
+  const startTime = Date.now();
+
+  // Create execution record
+  const execution = await createScheduleExecution({
+    scheduleType: 'git_stack_sync',
+    scheduleId: stackId,
+    environmentId: environmentId ?? null,
+    entityName: stackName,
+    triggeredBy,
+    status: 'running'
+  });
+
+  // Deploy the git stack (only if there are changes)
+  const result = await deployGitStack(stackId, { force: false });
+
+  if (result.success) {
+    if (result.skipped) {
+      log(`No changes detected for stack: ${stackName}, skipping redeploy`);
+      // Send notification for skipped sync
+      await sendEventNotification('git_sync_skipped', {
+        title: 'Git sync skipped',
+        message: `Stack "${stackName}" sync skipped: no changes detected`,
+        type: 'info'
+      }, envId);
+    } else {
+      log(`Successfully deployed stack: ${stackName}`);
+      // Send notification for successful sync
+      await sendEventNotification('git_sync_success', {
+        title: 'Git stack deployed',
+        message: `Stack "${stackName}" was synced and deployed successfully`,
+        type: 'success'
+      }, envId);
+    }
+  }
+}
+```
+
+## Environment Variables
+
+### Repository .env Files
+
+Dockhand can automatically load environment variables from files in your repository:
+
+```bash
+# Repository structure
+.
+├── compose.yaml
+├── .env.production
+├── .env.staging
+└── .env.development
+```
+
+Configure which file to use:
+
+```json
+{
+  "envFilePath": ".env.production"
+}
+```
+
+### Stack Variable Override
+
+Variables defined in Dockhand take precedence over repository files:
+
+1. Repository `.env` file (lowest priority)
+2. Stack-specific variables in Dockhand
+3. Environment variables set at deploy time (highest priority)
+
+## Manual Operations
+
+### Sync Repository
+
+Manually trigger a sync to check for updates:
+
+```bash
+POST /api/git/repositories/{id}/sync
+```
+
+Response:
+```json
+{
+  "success": true,
+  "hasChanges": true,
+  "currentCommit": "abc123",
+  "latestCommit": "def456"
+}
+```
+
+### Deploy Stack
+
+Manually deploy a Git stack:
+
+```bash
+POST /api/git/stacks/{id}/deploy
+```
+
+The API uses Server-Sent Events (SSE) for real-time deployment progress:
+
+```typescript:src/routes/api/git/stacks/[id]/deploy/+server.ts
+export const POST: RequestHandler = async (event) => {
+  const { params, cookies } = event;
+  const auth = await authorize(cookies);
+
+  const id = parseInt(params.id);
+  const gitStack = await getGitStack(id);
+  
+  if (!gitStack) {
+    return json({ error: 'Git stack not found' }, { status: 404 });
+  }
+
+  // Permission check with environment context
+  if (auth.authEnabled && !await auth.can('stacks', 'start', gitStack.environmentId || undefined)) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+
+  return createJobResponse(async (send) => {
+    try {
+      const result = await deployGitStack(id);
+      await auditGitStack(event, 'deploy', id, gitStack.stackName, gitStack.environmentId);
+      send('result', result);
+    } catch (error) {
+      console.error('Failed to deploy git stack:', error);
+      send('result', { success: false, error: 'Failed to deploy git stack' });
+    }
+  }, event.request);
+};
+```
+
+## Best Practices
+
+### Repository Structure
+
+```bash
+# Recommended repository layout
+my-app/
+├── compose.yaml              # Main compose file
+├── compose.prod.yaml         # Production overrides
+├── compose.dev.yaml          # Development overrides
+├── .env.example              # Template for environment variables
+├── .env.production           # Production variables (gitignored)
+├── .env.staging              # Staging variables (gitignored)
+└── docker/
+    ├── nginx/
+    │   └── nginx.conf
+    └── app/
+        └── Dockerfile
+```
+
+### Security Recommendations
+
+1. **Never commit secrets** to your repository
+2. **Use webhook secrets** to verify authenticity
+3. **Rotate credentials** periodically
+4. **Use read-only deploy keys** when possible
+5. **Enable SSL verification** for webhooks
+6. **Store sensitive env vars** in Dockhand, not in repository files
+
+### Deployment Strategies
+
+#### Blue-Green Deployments
+
+Use Git branches for zero-downtime deployments:
+
+```yaml
+# Create two stacks from different branches
+production-blue:
+  branch: release/blue
+  
+production-green:
+  branch: release/green
+```
+
+#### Multi-Environment Setup
+
+```json
+[
+  {
+    "name": "app-production",
+    "branch": "main",
+    "environmentId": 1,
+    "composePath": "compose.prod.yaml"
+  },
+  {
+    "name": "app-staging",
+    "branch": "develop",
+    "environmentId": 2,
+    "composePath": "compose.staging.yaml"
+  },
+  {
+    "name": "app-preview",
+    "branch": "feature/new-feature",
+    "environmentId": 3,
+    "composePath": "compose.yaml"
+  }
+]
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Authentication Failed
+```
+Error: Authentication failed
+Solution: Verify credentials and ensure the token has repository access
+```
+
+#### Webhook Not Triggering
+1. Check webhook secret matches in both GitHub/GitLab and Dockhand
+2. Verify webhook URL is accessible from the internet
+3. Check webhook delivery logs in your Git provider
+4. Ensure SSL certificate is valid (or disable verification for testing)
+
+#### Stack Not Updating
+```
+Status: "No changes detected"
+Solution: Verify the correct branch is configured and commits are pushed
+```
+
+### Viewing Sync Logs
+
+All sync operations are logged and can be viewed in the Schedule Executions page:
+
+```bash
+GET /api/schedules/executions?scheduleType=git_stack_sync
+```
+
+## API Reference
+
+### Repository Endpoints
+
+```bash
+# List repositories
+GET /api/git/repositories
+
+# Create repository
+POST /api/git/repositories
+
+# Update repository
+PUT /api/git/repositories/{id}
+
+# Delete repository
+DELETE /api/git/repositories/{id}
+
+# Sync repository
+POST /api/git/repositories/{id}/sync
+
+# Test repository connection
+POST /api/git/repositories/{id}/test
+```
+
+### Stack Endpoints
+
+```bash
+# List Git stacks
+GET /api/git/stacks
+
+# Create Git stack
+POST /api/git/stacks
+
+# Update Git stack
+PUT /api/git/stacks/{id}
+
+# Delete Git stack
+DELETE /api/git/stacks/{id}
+
+# Deploy Git stack
+POST /api/git/stacks/{id}/deploy
+
+# Sync Git stack
+POST /api/git/stacks/{id}/sync
+
+# Get webhook URL
+GET /api/git/stacks/{id}/webhook
+```
+
+### Credential Endpoints
+
+```bash
+# List credentials
+GET /api/git/credentials
+
+# Create credential
+POST /api/git/credentials
+
+# Update credential
+PUT /api/git/credentials/{id}
+
+# Delete credential
+DELETE /api/git/credentials/{id}
+```

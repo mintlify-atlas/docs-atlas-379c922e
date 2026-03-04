@@ -1,0 +1,542 @@
+---
+title: Two-Factor Authentication
+description: Add TOTP-based 2FA with backup codes for enhanced security
+---
+
+Dockhand supports Time-Based One-Time Password (TOTP) two-factor authentication for local user accounts. 2FA adds an extra layer of security by requiring a code from an authenticator app in addition to the password.
+
+## Overview
+
+### Features
+
+- **TOTP (Time-Based OTP)** - Works with Google Authenticator, Authy, 1Password, etc.
+- **QR Code Setup** - Scan with your authenticator app
+- **Backup Codes** - 10 single-use codes for account recovery
+- **Per-User** - Each user manages their own 2FA settings
+- **Optional** - 2FA is not required, users opt-in
+
+### Security Specifications
+
+- **Algorithm**: SHA-1 (TOTP standard)
+- **Digits**: 6
+- **Period**: 30 seconds
+- **Window**: ±1 period (90 seconds total)
+- **Secret Size**: 20 bytes (160 bits)
+- **Backup Codes**: 8 characters, alphanumeric (no confusable characters)
+
+## Implementation
+
+Dockhand uses the `otpauth` npm package for TOTP generation and verification:
+
+```json
+{
+  "dependencies": {
+    "otpauth": "^9.4.1",
+    "qrcode": "^1.5.4"
+  }
+}
+```
+
+## Setting Up 2FA
+
+### Via Web UI
+
+1. Navigate to **Settings > Profile**
+2. Click **Enable Two-Factor Authentication**
+3. Scan the QR code with your authenticator app
+4. Enter the 6-digit code to verify
+5. Save the 10 backup codes in a secure location
+
+### Via API
+
+#### Step 1: Generate QR Code
+
+```bash
+curl -X POST http://localhost:8000/api/users/2/mfa \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "qrDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg..."
+}
+```
+</ResponseExample>
+
+- **secret**: Base32-encoded TOTP secret (for manual entry)
+- **qrDataUrl**: QR code as data URL (for scanning)
+
+#### Step 2: Verify and Enable
+
+Scan the QR code with your authenticator app, then verify:
+
+```bash
+curl -X POST http://localhost:8000/api/users/2/mfa \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "action": "verify",
+    "token": "123456"
+  }'
+```
+
+<ResponseExample>
+```json
+{
+  "success": true,
+  "message": "MFA enabled successfully",
+  "backupCodes": [
+    "A3B7K9M2",
+    "X5N2P8Q4",
+    "R7T3V9W6",
+    "Z2C5H8J3",
+    "K4M7P9R2",
+    "F3G6J8L5",
+    "W2Y5B7D4",
+    "Q8T3V6X9",
+    "H5K8N2P7",
+    "C3F7J9M4"
+  ]
+}
+```
+</ResponseExample>
+
+<Warning>
+Backup codes are shown **only once**. Store them securely (password manager, encrypted file, physical safe). Each code can only be used once.
+</Warning>
+
+## Logging In with 2FA
+
+### Step 1: Submit Username and Password
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "alice",
+    "password": "SecureP@ssw0rd123"
+  }'
+```
+
+If the user has 2FA enabled:
+
+```json
+{
+  "requiresMfa": true
+}
+```
+
+### Step 2: Submit TOTP Code
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "alice",
+    "password": "SecureP@ssw0rd123",
+    "mfaToken": "123456"
+  }'
+```
+
+<ResponseExample>
+```json
+{
+  "success": true,
+  "user": {
+    "id": 2,
+    "username": "alice",
+    "email": "alice@example.com",
+    "displayName": "Alice Johnson",
+    "isAdmin": false
+  }
+}
+```
+</ResponseExample>
+
+## Using Backup Codes
+
+If you lose access to your authenticator app, use a backup code:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "alice",
+    "password": "SecureP@ssw0rd123",
+    "mfaToken": "A3B7K9M2"
+  }'
+```
+
+Backup codes:
+- Are accepted in place of TOTP codes
+- Can only be used **once**
+- Are removed from the database after use
+- Work regardless of formatting (spaces and dashes are ignored)
+
+## Disabling 2FA
+
+### Via Web UI
+
+1. Navigate to **Settings > Profile**
+2. Click **Disable Two-Factor Authentication**
+3. Confirm the action
+
+### Via API
+
+Users can disable their own 2FA:
+
+```bash
+curl -X DELETE http://localhost:8000/api/users/2/mfa \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+Admins can disable 2FA for other users:
+
+```bash
+curl -X DELETE http://localhost:8000/api/users/5/mfa \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+{
+  "success": true,
+  "message": "MFA disabled successfully"
+}
+```
+</ResponseExample>
+
+This removes the TOTP secret and backup codes from the database.
+
+## TOTP Details
+
+### QR Code Format
+
+The QR code encodes an `otpauth://` URI:
+
+```
+otpauth://totp/Dockhand%20(hostname):alice?secret=JBSWY3DPEHPK3PXP&issuer=Dockhand%20(hostname)&algorithm=SHA1&digits=6&period=30
+```
+
+- **Type**: `totp` (Time-Based OTP)
+- **Issuer**: `Dockhand (hostname)` - includes `DOCKHAND_HOSTNAME` env var
+- **Label**: Username (`alice`)
+- **Secret**: Base32-encoded secret
+- **Algorithm**: SHA-1 (standard)
+- **Digits**: 6
+- **Period**: 30 seconds
+
+### Time Window
+
+Dockhand accepts codes within a **±1 period window** (90 seconds total):
+
+- **Current period** (30 seconds)
+- **Previous period** (-30 seconds)
+- **Next period** (+30 seconds)
+
+This accounts for clock drift between server and client.
+
+### Token Validation
+
+```typescript
+const totp = new OTPAuth.TOTP({
+  issuer: 'Dockhand',
+  label: user.username,
+  algorithm: 'SHA1',
+  digits: 6,
+  period: 30,
+  secret: OTPAuth.Secret.fromBase32(mfaData.secret)
+});
+
+const delta = totp.validate({ token, window: 1 });
+if (delta !== null) {
+  // Valid - delta is the time step difference
+  return true;
+}
+```
+
+## Backup Codes
+
+### Generation
+
+Backup codes are generated when 2FA is enabled:
+
+```typescript
+function generateBackupCodes(): string[] {
+  const codes: string[] = [];
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No 0, O, 1, I
+  for (let i = 0; i < 10; i++) {
+    let code = '';
+    for (let j = 0; j < 8; j++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    codes.push(code);
+  }
+  return codes;
+}
+```
+
+- **Count**: 10 codes
+- **Length**: 8 characters
+- **Character Set**: `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (32 chars)
+- **Entropy**: ~40 bits per code (8 × log2(32))
+- **Excluded**: Confusable characters (0/O, 1/I/l)
+
+### Storage
+
+Backup codes are hashed with SHA-256 before storage:
+
+```typescript
+async function hashBackupCode(code: string): Promise<string> {
+  const normalized = code.toUpperCase().replace(/[\s-]/g, '');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+```
+
+The database stores only hashed codes, not plain text.
+
+### Database Format
+
+MFA data is stored as JSON in the `users.mfa_secret` column:
+
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "backupCodes": [
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
+  ]
+}
+```
+
+### Verification
+
+```typescript
+const hashedInput = await hashBackupCode(token);
+const codeIndex = mfaData.backupCodes.indexOf(hashedInput);
+
+if (codeIndex !== -1) {
+  // Valid backup code - remove it
+  const updatedBackupCodes = [...mfaData.backupCodes];
+  updatedBackupCodes.splice(codeIndex, 1);
+  
+  await updateUser(userId, {
+    mfaSecret: JSON.stringify({
+      secret: mfaData.secret,
+      backupCodes: updatedBackupCodes
+    })
+  });
+  
+  return true;
+}
+```
+
+Once used, a backup code is permanently removed.
+
+## Compatible Authenticator Apps
+
+Dockhand works with any TOTP-compatible authenticator:
+
+### Mobile Apps
+
+- **Google Authenticator** - [iOS](https://apps.apple.com/app/google-authenticator/id388497605) / [Android](https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2)
+- **Authy** - [iOS](https://apps.apple.com/app/authy/id494168017) / [Android](https://play.google.com/store/apps/details?id=com.authy.authy)
+- **Microsoft Authenticator** - [iOS](https://apps.apple.com/app/microsoft-authenticator/id983156458) / [Android](https://play.google.com/store/apps/details?id=com.azure.authenticator)
+- **Duo Mobile** - [iOS](https://apps.apple.com/app/duo-mobile/id422663827) / [Android](https://play.google.com/store/apps/details?id=com.duosecurity.duomobile)
+
+### Password Managers
+
+- **1Password** - Built-in TOTP support
+- **Bitwarden** - Premium feature
+- **LastPass** - Authenticator app
+- **KeePassXC** - Desktop app with TOTP
+
+### Browser Extensions
+
+- **Authenticator** (Chrome/Firefox/Edge)
+- **OTP Manager** (Firefox)
+
+## Recovery Process
+
+### Lost Authenticator + Have Backup Codes
+
+1. Log in with username, password, and a backup code
+2. Navigate to Settings > Profile
+3. Disable 2FA
+4. Re-enable 2FA with a new QR code
+5. Save new backup codes
+
+### Lost Authenticator + No Backup Codes
+
+Contact an admin to disable 2FA:
+
+```bash
+# Admin disables 2FA for the user
+curl -X DELETE http://localhost:8000/api/users/5/mfa \
+  -H "Cookie: dockhand_session=ADMIN_SESSION_TOKEN"
+```
+
+The user can then log in with just their password and re-enable 2FA.
+
+### Lost Password + 2FA Enabled
+
+2FA doesn't help if the password is lost. An admin must:
+
+1. Reset the password:
+   ```bash
+   curl -X PATCH http://localhost:8000/api/users/5 \
+     -H "Content-Type: application/json" \
+     -d '{"password": "NewTemporaryPassword123"}'
+   ```
+2. Optionally disable 2FA if the user lost their authenticator
+
+## Database Schema
+
+MFA configuration is stored in the `users` table:
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  mfa_enabled BOOLEAN DEFAULT FALSE,
+  mfa_secret TEXT,  -- JSON: {secret: string, backupCodes: string[]}
+  -- other fields...
+);
+```
+
+### Example Data
+
+```sql
+SELECT username, mfa_enabled, mfa_secret FROM users WHERE id = 2;
+```
+
+| username | mfa_enabled | mfa_secret |
+|----------|-------------|------------|
+| alice | true | `{"secret":"JBSWY3DPEHPK3PXP","backupCodes":["e3b0c44...","d7a8fbb..."]}` |
+
+## Security Considerations
+
+### Secret Storage
+
+TOTP secrets are stored as plain text in the database. This is necessary because the server needs to compute OTP codes to verify user input.
+
+To protect secrets:
+- **Encrypt the database** at rest
+- **Restrict database access** to the application only
+- **Use strong passwords** for database authentication
+- **Enable audit logging** (Enterprise) to track MFA changes
+
+### Backup Code Storage
+
+Backup codes are hashed with SHA-256 before storage. This prevents attackers from recovering plain codes if the database is compromised.
+
+**Why SHA-256 instead of Argon2?**
+- Backup codes have high entropy (40 bits)
+- Brute force is computationally infeasible
+- Fast verification is acceptable
+- SHA-256 is sufficient for high-entropy secrets
+
+### Time Synchronization
+
+TOTP relies on synchronized clocks. Ensure:
+- **Server**: Uses NTP for accurate time
+- **Client**: Device clock is roughly accurate (±60 seconds is fine)
+
+If time drift exceeds ±90 seconds, codes will be rejected.
+
+### Rate Limiting
+
+2FA codes are subject to the same rate limiting as passwords:
+
+- **Threshold**: 5 failed attempts per IP + username
+- **Window**: 15 minutes
+- **Lockout**: 15 minutes
+
+This prevents brute-force attacks on TOTP codes.
+
+## Best Practices
+
+### For Users
+
+1. **Use a reputable authenticator app** - Google Authenticator, Authy, 1Password
+2. **Save backup codes immediately** - Store in a password manager or offline
+3. **Test a backup code** - Verify one works before you need it
+4. **Enable 2FA on critical accounts** - Especially admin accounts
+5. **Don't screenshot QR codes** - Screenshots can leak if your device is compromised
+
+### For Admins
+
+1. **Require 2FA for admins** - Policy, not technical enforcement
+2. **Keep a local admin account** without 2FA for emergency access
+3. **Document recovery process** - So users know what to do
+4. **Audit 2FA status** - Periodically check which users have 2FA enabled
+5. **Monitor failed 2FA attempts** - Check server logs for suspicious activity
+
+## Troubleshooting
+
+### Codes Always Invalid
+
+**Issue:** All TOTP codes are rejected.
+
+**Solutions:**
+- Check server time: `date -u` (should be accurate to ±60 seconds)
+- Enable NTP on the Docker host: `timedatectl set-ntp true`
+- Verify authenticator app time sync (usually automatic)
+- Ensure you're entering the code within 30 seconds of generation
+
+### Backup Codes Not Working
+
+**Issue:** Backup codes are rejected.
+
+**Solutions:**
+- Enter the code exactly as shown (uppercase, no spaces)
+- Codes are case-insensitive, spaces/dashes ignored
+- Verify you haven't used this code before (single-use)
+- Check you're using codes from the most recent 2FA setup
+
+### Lost Backup Codes
+
+**Issue:** User lost backup codes and authenticator app.
+
+**Solutions:**
+1. Contact an admin
+2. Admin disables 2FA: `DELETE /api/users/{id}/mfa`
+3. User resets password if needed
+4. User re-enables 2FA with new codes
+
+### QR Code Won't Scan
+
+**Issue:** Authenticator app can't read the QR code.
+
+**Solutions:**
+- Increase browser zoom (QR code gets larger)
+- Use manual entry: Enter the secret from the UI
+- Take a clear photo if scanning from another device
+- Try a different authenticator app
+
+## Source Code Reference
+
+- `src/lib/server/auth.ts:834-1036` - TOTP implementation
+- `src/routes/api/users/[id]/mfa/+server.ts` - MFA endpoints
+- `src/routes/profile/MfaSetupModal.svelte` - UI component
+- `src/routes/login/+page.svelte:301` - Login form with 2FA
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Local Users" icon="user" href="/auth/local-users">
+    Manage user accounts and passwords
+  </Card>
+  <Card title="OIDC/SSO" icon="shield-halved" href="/auth/oidc">
+    Integrate with your Identity Provider
+  </Card>
+  <Card title="RBAC" icon="users-gear" href="/auth/rbac">
+    Configure role-based access control (Enterprise)
+  </Card>
+  <Card title="Authentication" icon="shield" href="/auth/overview">
+    Back to authentication overview
+  </Card>
+</CardGroup>

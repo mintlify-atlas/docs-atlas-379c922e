@@ -1,0 +1,470 @@
+---
+title: 'Volumes'
+description: 'Manage Docker volumes for persistent data storage with browsing, backup, and cloning'
+icon: 'hard-drive'
+---
+
+## Overview
+
+The Volumes page provides comprehensive management of Docker volumes for persistent container data. It includes volume creation, file browsing, backup/restore operations, and cloning functionality to duplicate volume data.
+
+## Key Features
+
+### Volume Management
+
+- **Named Volumes**: Create and manage named volumes
+- **Driver Support**: Local driver and third-party volume plugins
+- **Usage Tracking**: See which containers are using each volume
+- **Stack Integration**: Volumes linked to Docker Compose stacks
+- **Size Information**: (If supported by driver)
+
+### Volume Operations
+
+**Create Volumes**:
+- Specify volume name
+- Select driver (local or plugin)
+- Configure driver options
+- Add labels for organization
+
+**Volume Actions**:
+- Inspect volume details (configuration, mount point)
+- Browse volume files with web-based file manager
+- Export volume data as TAR/TAR.GZ
+- Clone volume to create duplicate with same data
+- Remove volumes (with protection for in-use volumes)
+
+**Bulk Operations**:
+- Select multiple volumes
+- Bulk removal of unused volumes
+- Prune unused volumes
+
+### File Browser
+
+**Browse Volume Contents**:
+- Navigate directory structure
+- View file metadata (size, permissions, modified date)
+- Preview file contents
+- Download individual files
+- Upload files to volume
+- Edit text files in-browser
+- Create directories
+- Delete files and folders
+
+**Supported Operations**:
+- Upload files via drag-and-drop or file picker
+- Download files to local machine
+- Edit text files with syntax highlighting
+- Delete files with confirmation
+- Rename files and directories
+
+### Backup and Restore
+
+**Export Volume**:
+- Export entire volume as archive
+- Format: TAR or TAR.GZ (configurable)
+- Downloads directly to browser
+- Preserves file permissions and metadata
+
+**Clone Volume**:
+- Create exact copy of volume
+- Includes all files and directory structure
+- Preserves permissions and ownership
+- Uses temporary container for data transfer
+- Progress tracking during clone operation
+
+### Filtering and Search
+
+- **Text Search**: Filter by volume name or stack name
+- **Driver Filter**: Multi-select for volume drivers
+- **Usage Filter**: Show all, in-use, or unused volumes
+- **Persistent Filters**: Saved to local storage
+- **Sortable Columns**: Sort by name, driver, stack, created date
+
+### UI Features
+
+**Volume Table**:
+- Expandable rows (if needed in future)
+- Status indicators
+- Container usage display
+- Quick action buttons
+- Highlight row on click
+
+**Usage Display**:
+- Clickable container names
+- Opens container inspect modal
+- Shows all containers using the volume
+- Displays mount path in container
+
+## How to Use
+
+### Creating a Volume
+
+1. Click the **Create** button
+2. **Configure Volume**:
+   - Enter unique volume name
+   - Select driver (default: local)
+3. **Driver Options** (optional):
+   - For local driver:
+     - `type`: Type of mount (e.g., nfs, tmpfs)
+     - `device`: Device or remote path
+     - `o`: Mount options
+   - For plugin drivers: Plugin-specific options
+4. **Labels** (optional):
+   - Add custom labels for organization
+   - Format: `key=value`
+5. Click **Create** to create the volume
+
+### Browsing Volume Files
+
+1. Click the **Folder** icon on a volume row
+2. **File Browser Opens**:
+   - Shows directory tree
+   - Lists files with details
+3. **Navigate Directories**:
+   - Click folder names to enter
+   - Use breadcrumb to navigate up
+4. **File Operations**:
+   - Click file to preview (text files)
+   - Click download icon to save locally
+   - Click edit icon to modify text files
+   - Click delete icon to remove files
+5. **Upload Files**:
+   - Click "Upload" button
+   - Select files from file picker
+   - Or drag and drop files
+6. Close browser when done
+
+### Exporting a Volume
+
+1. Click the **Download** icon on a volume row
+2. Volume exports in background
+3. Archive downloads automatically
+4. Format based on global setting (TAR or TAR.GZ)
+5. Extract archive on local machine to restore data
+
+### Cloning a Volume
+
+1. Click the **Clone** icon (stamp icon) on a volume row
+2. **Configure Clone**:
+   - Enter name for new volume
+   - Original volume name shown for reference
+3. Click **Clone** to start
+4. **Clone Process**:
+   - Creates new empty volume
+   - Starts temporary container
+   - Mounts both volumes
+   - Copies all data
+   - Removes temporary container
+5. Progress bar shows status
+6. New volume appears in list when complete
+
+### Inspecting Volume Details
+
+1. Click the **Eye** icon on a volume row
+2. **Volume Information**:
+   - Volume name
+   - Driver
+   - Mount point on host
+   - Created timestamp
+   - Labels
+   - Options
+   - Scope
+3. Copy any value to clipboard
+4. View JSON representation
+
+### Removing Volumes
+
+**Single Volume**:
+1. Click the **Remove** icon
+2. Confirm deletion
+3. Volume is removed from Docker
+4. **Note**: In-use volumes cannot be removed
+
+**Multiple Volumes**:
+1. Select volumes using checkboxes
+2. Click **Delete** in selection bar
+3. Confirm bulk deletion
+4. Unused volumes are removed
+
+**Prune Unused**:
+1. Click **Prune** button
+2. Confirms removal of all unused volumes
+3. Volumes not mounted by any container are removed
+
+## UI Walkthrough
+
+### Header Section
+
+- **Title**: "Volumes" with total count
+- **Search Bar**: Filter by volume name or stack
+- **Driver Filter**: Multi-select dropdown
+- **Usage Filter**: All / In use / Unused
+- **Prune Button**: Remove unused volumes
+- **Refresh**: Manually refresh volume list
+- **Create Button**: Open volume creation modal
+
+### Selection Bar
+
+Appears when volumes are selected:
+- Number of selected volumes
+- **Clear**: Deselect all volumes
+- **Delete**: Remove selected volumes (only unused)
+
+### Volume Table
+
+**Columns**:
+- **Checkbox**: Select for bulk operations
+- **Name**: Volume name (monospace font)
+- **Driver**: Driver type badge
+- **Scope**: Local/global
+- **Stack**: Compose project name (if applicable)
+- **Used By**: Container names (clickable)
+- **Created**: Timestamp
+- **Actions**: Quick action buttons
+
+**Action Icons**:
+- **Eye**: View volume details
+- **Folder**: Browse files in volume
+- **Download**: Export volume data
+- **Stamp**: Clone volume
+- **Remove**: Delete volume (only if unused)
+
+### File Browser Modal
+
+**Header**:
+- Volume name
+- Current path breadcrumb
+- Upload button
+- Close button
+
+**File List**:
+- Icon for type (folder/file)
+- File name
+- Size
+- Modified date
+- Permissions
+- Actions (download, edit, delete)
+
+**Navigation**:
+- Click folders to enter
+- Click breadcrumb to go up
+- Back button
+
+### Volume Details Modal
+
+**Sections**:
+1. **Overview**:
+   - Volume name
+   - Driver
+   - Scope
+   - Created timestamp
+
+2. **Mount Point**:
+   - Host path (if local driver)
+   - Device (if network driver)
+
+3. **Driver Options**:
+   - Key-value pairs
+   - Custom configuration
+
+4. **Labels**:
+   - User labels
+   - System labels (stack, etc.)
+
+5. **Usage**:
+   - Connected containers
+   - Mount paths in containers
+
+## Real Examples
+
+### Example: Database Volume
+
+```yaml
+Volume Configuration:
+Name: postgres-data
+Driver: local
+Scope: local
+
+Used By:
+  - postgres-db (mounted at /var/lib/postgresql/data)
+
+Purpose:
+  Persistent storage for PostgreSQL database
+  Survives container removal
+  Can be backed up and restored
+```
+
+### Example: NFS Volume
+
+```yaml
+Volume Configuration:
+Name: shared-storage
+Driver: local
+Scope: local
+
+Driver Options:
+  type: nfs
+  device: :/data/shared
+  o: addr=192.168.1.100,rw,nfsvers=4
+
+Used By:
+  - app-server-1 (mounted at /app/uploads)
+  - app-server-2 (mounted at /app/uploads)
+  - app-server-3 (mounted at /app/uploads)
+
+Purpose:
+  Shared file storage across multiple containers
+  All containers access same files
+  NFS server provides high availability
+```
+
+### Example: Backup Volume
+
+```yaml
+Volume Configuration:
+Name: backup-data
+Driver: local
+Scope: local
+
+Used By:
+  - backup-service (mounted at /backups)
+
+Labels:
+  app: backup
+  tier: storage
+  retention: 30-days
+
+Purpose:
+  Store database backups
+  Mounted by backup service
+  Exported weekly for offsite storage
+```
+
+### Example: Tmpfs Volume
+
+```yaml
+Volume Configuration:
+Name: temp-cache
+Driver: local
+Scope: local
+
+Driver Options:
+  type: tmpfs
+  device: tmpfs
+  o: size=1G,mode=1777
+
+Used By:
+  - cache-service (mounted at /tmp/cache)
+
+Purpose:
+  Fast in-memory storage
+  Data lost on container stop
+  Good for temporary cache
+```
+
+### Example: Clone Operation
+
+```
+Original Volume: prod-data (5.2 GB)
+New Volume: prod-data-backup
+
+Clone Process:
+1. Create empty volume: prod-data-backup
+2. Start temporary container with both volumes mounted:
+   - /source: prod-data (read-only)
+   - /dest: prod-data-backup (read-write)
+3. Copy all data: cp -a /source/. /dest/
+4. Verify copy completed
+5. Remove temporary container
+6. New volume ready with identical data
+
+Duration: ~2 minutes for 5.2 GB
+```
+
+## Database Schema
+
+Volumes are managed through the Docker API and don't have persistent storage in Dockhand's database, except for tracking usage relationships.
+
+**Docker API Response** includes:
+- Volume name
+- Driver
+- Mount point
+- Created timestamp
+- Labels
+- Options
+- Scope
+
+**Tracked in Containers**:
+- Mount information links volumes to containers
+- Source volume name
+- Destination path in container
+- Read-only flag
+
+## Technical Details
+
+### Volume Drivers
+
+**Local Driver**:
+- Default driver
+- Stores data on Docker host
+- Supports bind mounts, tmpfs, and NFS
+- Configured via driver options
+
+**Third-Party Plugins**:
+- Network-attached storage (NAS)
+- Cloud storage (AWS EBS, Azure Disk)
+- Distributed storage (GlusterFS, Ceph)
+- Installed separately
+
+### File Browser Implementation
+
+**Backend**:
+- Temporary container with volume mounted
+- Uses BusyBox or Alpine image
+- File operations via container exec
+- Streams files for upload/download
+
+**Frontend**:
+- Tree view for directory navigation
+- Lazy loading for large directories
+- Monaco editor for file editing
+- Drag-and-drop upload support
+
+### Clone Operation
+
+**Process**:
+1. Create destination volume
+2. Start ephemeral container:
+   - Mounts source volume (read-only)
+   - Mounts destination volume (read-write)
+3. Execute copy command: `cp -a /source/. /dest/`
+4. Monitor progress (if supported)
+5. Remove container
+6. Verify destination volume
+
+**Performance**:
+- Copy speed depends on data size and disk I/O
+- Uses Docker host's filesystem cache
+- No network overhead (both volumes on same host)
+
+### Export Operation
+
+**Process**:
+1. Start temporary container with volume mounted
+2. Create TAR archive: `tar -czf /tmp/backup.tar.gz -C /data .`
+3. Stream archive to client
+4. Remove container
+
+### API Endpoints
+
+- `GET /api/volumes` - List all volumes
+- `POST /api/volumes` - Create volume
+- `GET /api/volumes/:name` - Get volume details
+- `DELETE /api/volumes/:name` - Remove volume
+- `GET /api/volumes/:name/browse` - List files in volume
+- `GET /api/volumes/:name/export` - Export volume as archive
+- `POST /api/volumes/:name/clone` - Clone volume
+- `POST /api/volumes/:name/upload` - Upload file to volume
+- `GET /api/volumes/:name/download` - Download file from volume
+- `DELETE /api/volumes/:name/files` - Delete file in volume
+- `POST /api/prune/volumes` - Prune unused volumes

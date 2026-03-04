@@ -1,80 +1,528 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quick Start'
+description: 'Get started with Dockhand in minutes'
+icon: 'rocket'
 ---
 
-## Get started in three steps
+This guide walks you through deploying Dockhand, creating your first user, and managing your first container.
 
-Get your documentation site running locally and make your first customization.
+## Step 1: Deploy Dockhand
 
-### Step 1: Set up your local environment
+<Tabs>
+  <Tab title="Docker Compose (Recommended)">
+    Create a `docker-compose.yaml` file:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+    ```yaml docker-compose.yaml
+    services:
+      dockhand:
+        image: fnsys/dockhand:latest
+        container_name: dockhand
+        restart: unless-stopped
+        ports:
+          - 3000:3000
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+          - dockhand_data:/app/data
+
+    volumes:
+      dockhand_data:
+    ```
+
+    Start Dockhand:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    Check the logs:
+
+    ```bash
+    docker compose logs -f dockhand
+    ```
+  </Tab>
+
+  <Tab title="Docker Run">
+    Run Dockhand with a single command:
+
+    ```bash
+    docker run -d \
+      --name dockhand \
+      --restart unless-stopped \
+      -p 3000:3000 \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v dockhand_data:/app/data \
+      fnsys/dockhand:latest
+    ```
+
+    Check the logs:
+
+    ```bash
+    docker logs -f dockhand
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  Wait for the message "Database migrations completed successfully" in the logs before proceeding.
+</Info>
+
+## Step 2: First Login
+
+<Steps>
+  <Step title="Access Web Interface">
+    Open your browser and navigate to:
+    ```
+    http://localhost:3000
+    ```
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    You'll see the Dockhand login page.
+  </Step>
+
+  <Step title="Register Admin Account">
+    Click **"Create Account"** or **"Register"** and fill in:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    - **Username**: Your admin username (e.g., `admin`)
+    - **Password**: Strong password (minimum 8 characters)
+    - **Confirm Password**: Re-enter your password
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <Note>
+      The first user to register automatically becomes the administrator with full access to all features.
+    </Note>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Login">
+    Use your newly created credentials to log in. You'll be redirected to the Dockhand dashboard.
+  </Step>
+</Steps>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Step 3: Explore the Dashboard
 
-### Step 3: Go live
+After logging in, you'll see the main dashboard with:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+- **Real-time Metrics**: CPU, memory, and disk usage
+- **Container Stats**: Running, stopped, and total containers
+- **Image Count**: Total Docker images on your system
+- **Volume and Network Stats**: Storage and networking information
+- **Recent Activity**: Latest container and stack events
 
-## Next steps
+<Info>
+  The dashboard updates in real-time using WebSocket connections. No page refresh needed!
+</Info>
 
-Now that you have your docs running, explore these key features:
+## Step 4: Manage Your First Container
 
-<CardGroup cols={2}>
+<Tabs>
+  <Tab title="View Existing Containers">
+    <Steps>
+      <Step title="Navigate to Containers">
+        Click **"Containers"** in the left sidebar to see all containers on your Docker host.
+      </Step>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+      <Step title="View Container Details">
+        Click on any container to see:
+        - Container status and health
+        - Resource usage (CPU, memory, network I/O)
+        - Environment variables
+        - Port mappings
+        - Volume mounts
+        - Network connections
+      </Step>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+      <Step title="Interact with Container">
+        Available actions:
+        - **Start/Stop/Restart**: Control container lifecycle
+        - **Logs**: View real-time logs with search and filtering
+        - **Terminal**: Open an interactive shell inside the container
+        - **Files**: Browse and manage container filesystem
+        - **Stats**: View detailed resource metrics
+      </Step>
+    </Steps>
+  </Tab>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+  <Tab title="Deploy New Container">
+    <Steps>
+      <Step title="Navigate to Container Creation">
+        Click **"Containers"** → **"+ New Container"** button.
+      </Step>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+      <Step title="Configure Container">
+        Fill in the basic settings:
+        
+        ```yaml Example: Nginx Web Server
+        Name: my-nginx
+        Image: nginx:latest
+        Ports: 8080:80
+        Restart Policy: unless-stopped
+        ```
+      </Step>
 
-</CardGroup>
+      <Step title="Advanced Options (Optional)">
+        Configure additional settings:
+        - **Environment Variables**: Key-value pairs
+        - **Volumes**: Bind mounts or named volumes
+        - **Networks**: Connect to specific Docker networks
+        - **Labels**: Metadata for organization
+        - **Resources**: CPU and memory limits
+      </Step>
+
+      <Step title="Create and Start">
+        Click **"Create"** to deploy the container. It will start automatically and appear in your container list.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Step 5: Deploy Your First Stack
+
+Stacks allow you to deploy multi-container applications using Docker Compose.
+
+<Steps>
+  <Step title="Navigate to Stacks">
+    Click **"Stacks"** in the left sidebar, then click **"+ New Stack"**.
+  </Step>
+
+  <Step title="Create Stack Configuration">
+    Enter stack details:
+    
+    - **Name**: `my-first-stack`
+    - **Editor**: Choose between:
+      - **Compose Editor**: Write Docker Compose YAML
+      - **Form Editor**: Visual form-based configuration
+  </Step>
+
+  <Step title="Add Compose Content">
+    Here's a simple example with WordPress and MySQL:
+
+    ```yaml docker-compose.yml
+    services:
+      db:
+        image: mysql:8.0
+        volumes:
+          - db_data:/var/lib/mysql
+        environment:
+          MYSQL_ROOT_PASSWORD: somewordpress
+          MYSQL_DATABASE: wordpress
+          MYSQL_USER: wordpress
+          MYSQL_PASSWORD: wordpress
+        restart: unless-stopped
+
+      wordpress:
+        image: wordpress:latest
+        ports:
+          - 8080:80
+        environment:
+          WORDPRESS_DB_HOST: db
+          WORDPRESS_DB_USER: wordpress
+          WORDPRESS_DB_PASSWORD: wordpress
+          WORDPRESS_DB_NAME: wordpress
+        depends_on:
+          - db
+        restart: unless-stopped
+
+    volumes:
+      db_data:
+    ```
+  </Step>
+
+  <Step title="Deploy Stack">
+    Click **"Deploy"** or **"Create & Start"**. Dockhand will:
+    
+    1. Validate the Docker Compose syntax
+    2. Create the stack directory
+    3. Pull required images (if not available)
+    4. Create networks and volumes
+    5. Start all services in dependency order
+    
+    Monitor deployment progress in real-time.
+  </Step>
+
+  <Step title="Verify Deployment">
+    Once deployed:
+    
+    - Stack status shows as **"Running"**
+    - All services appear in the stack detail view
+    - Access WordPress at `http://localhost:8080`
+  </Step>
+</Steps>
+
+<Warning>
+  Change default passwords in production deployments. The example above uses weak passwords for demonstration only.
+</Warning>
+
+## Step 6: View Logs and Terminal
+
+<Tabs>
+  <Tab title="Container Logs">
+    <Steps>
+      <Step title="Open Logs View">
+        Navigate to any container and click **"Logs"** tab.
+      </Step>
+
+      <Step title="Use Log Features">
+        - **Real-time streaming**: Logs update automatically
+        - **Search**: Filter logs by keyword
+        - **Timestamps**: Toggle timestamp display
+        - **Tail lines**: Limit number of lines shown
+        - **Download**: Export logs to file
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Interactive Terminal">
+    <Steps>
+      <Step title="Open Terminal">
+        Navigate to any running container and click **"Terminal"** tab.
+      </Step>
+
+      <Step title="Execute Commands">
+        You'll get an interactive shell (usually `/bin/sh` or `/bin/bash`) inside the container.
+        
+        Try some commands:
+        ```bash
+        # View running processes
+        ps aux
+        
+        # Check disk usage
+        df -h
+        
+        # View network configuration
+        ip addr
+        
+        # Install packages (if needed)
+        apt-get update && apt-get install -y curl
+        ```
+      </Step>
+    </Steps>
+    
+    <Note>
+      Terminal sessions are ephemeral. Changes made inside the container are lost unless you commit them or use volumes.
+    </Note>
+  </Tab>
+
+  <Tab title="File Browser">
+    <Steps>
+      <Step title="Open File Browser">
+        Navigate to any container and click **"Files"** tab.
+      </Step>
+
+      <Step title="Browse Filesystem">
+        - Navigate directories by clicking folder names
+        - View file contents by clicking file names
+        - Upload files from your computer
+        - Download files to your computer
+        - Delete files and directories
+      </Step>
+    </Steps>
+    
+    <Info>
+      File operations respect container permissions. Some paths may be read-only.
+    </Info>
+  </Tab>
+</Tabs>
+
+## Step 7: Configure Remote Docker Hosts
+
+Dockhand supports managing multiple Docker hosts (local and remote).
+
+<Steps>
+  <Step title="Navigate to Environments">
+    Click **"Settings"** → **"Environments"** in the sidebar.
+  </Step>
+
+  <Step title="Add Remote Host">
+    Click **"+ Add Environment"** and configure:
+    
+    - **Name**: Friendly name (e.g., `Production Server`)
+    - **Connection**:
+      - **Socket**: Local Docker socket (default)
+      - **TCP**: Remote Docker daemon (e.g., `tcp://192.168.1.100:2376`)
+      - **SSH**: Docker over SSH tunnel
+    - **TLS**: Upload certificates if using TLS-protected Docker daemon
+  </Step>
+
+  <Step title="Test Connection">
+    Click **"Test Connection"** to verify connectivity. You should see:
+    - Docker version
+    - Host OS and architecture
+    - Total resources (CPU, memory)
+  </Step>
+
+  <Step title="Switch Between Environments">
+    Use the environment selector in the top navigation bar to switch between Docker hosts.
+  </Step>
+</Steps>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  All Dockhand features (containers, stacks, images, volumes) work identically across all environments.
 </Note>
+
+## Step 8: Enable Authentication (Optional)
+
+For production deployments, configure SSO or additional authentication methods.
+
+<Tabs>
+  <Tab title="OIDC (SSO)">
+    <Steps>
+      <Step title="Navigate to Auth Settings">
+        Go to **"Settings"** → **"Authentication"** → **"OIDC Providers"**.
+      </Step>
+
+      <Step title="Add OIDC Provider">
+        Click **"+ Add Provider"** and configure:
+        
+        - **Provider Name**: Display name (e.g., `Keycloak`, `Azure AD`)
+        - **Client ID**: From your IdP
+        - **Client Secret**: From your IdP
+        - **Issuer URL**: Your IdP's issuer endpoint
+        - **Redirect URI**: `http://your-dockhand-url/api/auth/oidc/callback`
+      </Step>
+
+      <Step title="Test and Enable">
+        Click **"Test Connection"**, then **"Enable"** if successful.
+      </Step>
+    </Steps>
+    
+    <Info>
+      Users can now log in using your SSO provider. First login auto-creates their account.
+    </Info>
+  </Tab>
+
+  <Tab title="Local Users">
+    Local username/password authentication is enabled by default.
+    
+    To disable local auth and require SSO:
+    
+    ```yaml docker-compose.yaml
+    services:
+      dockhand:
+        image: fnsys/dockhand:latest
+        environment:
+          DISABLE_LOCAL_LOGIN: "true"
+        # ... other config
+    ```
+    
+    <Warning>
+      Ensure you have a working SSO provider configured before disabling local login.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="sliders" href="/configuration">
+    Explore all environment variables and advanced configuration options
+  </Card>
+  
+  <Card title="Git Integration" icon="code-branch" href="/features/git-integration">
+    Deploy stacks from Git repositories with auto-sync and webhooks
+  </Card>
+  
+  <Card title="Scheduling" icon="clock" href="/features/scheduling">
+    Automate container operations with cron-based scheduling
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Integrate Dockhand with your automation tools using the REST API
+  </Card>
+</CardGroup>
+
+## Common Tasks
+
+<AccordionGroup>
+  <Accordion title="How do I update a running stack?">
+    1. Navigate to **Stacks** → Select your stack
+    2. Click **"Edit"** to modify the Docker Compose file
+    3. Click **"Save & Redeploy"**
+    4. Dockhand will perform a rolling update (or recreate containers if needed)
+  </Accordion>
+
+  <Accordion title="How do I back up my data?">
+    **SQLite (default)**:
+    ```bash
+    # Backup data volume
+    docker run --rm \
+      -v dockhand_data:/data \
+      -v $(pwd):/backup \
+      alpine tar czf /backup/dockhand-backup.tar.gz /data
+    ```
+    
+    **PostgreSQL**:
+    ```bash
+    # Backup database
+    docker exec dockhand-postgres pg_dump -U dockhand dockhand > backup.sql
+    ```
+  </Accordion>
+
+  <Accordion title="How do I view all containers across environments?">
+    Use the **Dashboard** for a unified view, or switch environments using the selector in the top navigation bar.
+  </Accordion>
+
+  <Accordion title="Can I use Dockhand with Portainer?">
+    Yes! Dockhand and Portainer can coexist on the same Docker host. They use the Docker API independently and don't interfere with each other.
+  </Accordion>
+
+  <Accordion title="How do I upgrade Dockhand?">
+    ```bash
+    # Pull latest image
+    docker pull fnsys/dockhand:latest
+    
+    # Restart with new image
+    docker compose down
+    docker compose up -d
+    ```
+    
+    Database migrations run automatically on startup.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="I can't access the Docker socket">
+    **Symptom**: Dockhand shows "No Docker connection" or permission errors.
+    
+    **Solution**:
+    ```bash
+    # Find Docker socket group
+    stat -c '%g' /var/run/docker.sock
+    
+    # Add group to container
+    docker run -d \
+      --name dockhand \
+      --group-add [GID] \
+      -p 3000:3000 \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v dockhand_data:/app/data \
+      fnsys/dockhand:latest
+    ```
+  </Accordion>
+
+  <Accordion title="Stack deployment fails">
+    **Common causes**:
+    - Invalid Docker Compose syntax
+    - Missing required images
+    - Port conflicts
+    - Insufficient resources
+    
+    **Solution**: Check stack logs in the UI or run:
+    ```bash
+    docker logs dockhand
+    ```
+  </Accordion>
+
+  <Accordion title="Web UI is slow or unresponsive">
+    **Possible causes**:
+    - Many containers (>100)
+    - Slow Docker daemon
+    - Synology NAS with disk usage collection enabled
+    
+    **Solution**: Disable disk metrics collection on Synology:
+    ```yaml
+    services:
+      dockhand:
+        environment:
+          SKIP_DF_COLLECTION: "true"
+    ```
+  </Accordion>
+</AccordionGroup>

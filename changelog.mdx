@@ -1,0 +1,189 @@
+---
+title: Changelog
+description: Release history and version updates for Dockhand
+---
+
+## Version 1.0.20 (Current)
+
+### Overview
+Current stable release of Dockhand with comprehensive Docker management features.
+
+### Features
+- Container lifecycle management (start, stop, restart, remove)
+- Docker Compose stack orchestration with visual editor
+- Git integration for stack deployments with webhook support
+- Multi-environment support (local and remote Docker hosts)
+- Real-time log streaming and monitoring
+- Interactive terminal access to containers
+- Container file browser with upload/download capabilities
+- Image management (pull, remove, build)
+- Volume and network management
+- Scheduled operations with cron syntax
+- Activity dashboard and system monitoring
+- Health checks and notifications
+- Authentication (local users, OIDC/OAuth2, LDAP)
+- Optional Two-Factor Authentication (2FA)
+- Database support (SQLite and PostgreSQL)
+- Container resource monitoring (CPU, memory, network)
+- Bulk operations and batch actions
+- Registry management for private registries
+- Environment variable management
+- Git credentials storage
+- Advanced filtering and search
+- Dark/light theme support
+
+### Technical Stack
+- Frontend: SvelteKit 2, Svelte 5, shadcn-svelte, TailwindCSS
+- Backend: Bun runtime
+- Database: SQLite (default) or PostgreSQL
+- Base OS: Wolfi packages via apko
+- Direct Docker API integration
+
+### Known Issues
+- None reported for current stable release
+
+---
+
+## Previous Versions
+
+### Version 1.0.x Series
+Early stable releases with core functionality:
+- Container management
+- Basic stack support
+- Authentication system
+- Multi-environment support
+
+---
+
+## Upgrade Notes
+
+### Upgrading to Latest Version
+
+To update Dockhand to the latest version:
+
+```bash
+# Pull latest image
+docker pull ghcr.io/finsys/dockhand:latest
+
+# Stop current instance
+docker stop dockhand
+
+# Remove old container (data is preserved in volume)
+docker rm dockhand
+
+# Start new version
+docker run -d \
+  -p 8033:8033 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand-data:/data \
+  --name dockhand \
+  --restart unless-stopped \
+  ghcr.io/finsys/dockhand:latest
+```
+
+### Database Migrations
+
+Dockhand automatically runs database migrations on startup. Your data is preserved across updates.
+
+**Important**: Always backup your database before upgrading:
+
+```bash
+# For SQLite
+docker exec dockhand sqlite3 /data/dockhand.db ".backup /data/backup.db"
+docker cp dockhand:/data/backup.db ./backup-$(date +%Y%m%d).db
+
+# For PostgreSQL
+pg_dump -h localhost -U dockhand dockhand > backup-$(date +%Y%m%d).sql
+```
+
+### Breaking Changes
+
+No breaking changes in current release series.
+
+---
+
+## Roadmap
+
+### Planned Features
+
+Upcoming features under consideration:
+
+- **Enhanced Monitoring**
+  - Prometheus metrics export
+  - Grafana dashboard templates
+  - Advanced alerting rules
+
+- **Stack Management**
+  - Template library for common stacks
+  - Stack marketplace/sharing
+  - Enhanced compose file validation
+
+- **Security**
+  - Vulnerability scanning integration
+  - Security policy enforcement
+  - Audit log enhancements
+
+- **Automation**
+  - Workflow automation engine
+  - Advanced scheduling options
+  - Event-driven actions
+
+- **Multi-Host**
+  - Improved remote host management
+  - Cross-host operations
+  - Centralized management dashboard
+
+- **API & Integrations**
+  - REST API documentation
+  - Webhook system
+  - Third-party integrations
+
+### Feature Requests
+
+Have an idea? Submit feature requests via:
+- [GitHub Discussions](https://github.com/Finsys/dockhand/discussions)
+- [GitHub Issues](https://github.com/Finsys/dockhand/issues) with "enhancement" label
+
+---
+
+## Release Schedule
+
+Dockhand follows a continuous delivery model:
+
+- **Patch releases** (1.0.x): Bug fixes and minor improvements
+- **Minor releases** (1.x.0): New features and enhancements
+- **Major releases** (x.0.0): Significant changes and major features
+
+Releases are published to:
+- [GitHub Container Registry](https://ghcr.io/finsys/dockhand)
+- [GitHub Releases](https://github.com/Finsys/dockhand/releases)
+
+---
+
+## Support Policy
+
+- Latest stable version receives active support and updates
+- Security patches are provided for critical vulnerabilities
+- Bug fixes prioritized based on severity and impact
+
+---
+
+## Versioning
+
+Dockhand follows [Semantic Versioning](https://semver.org/):
+
+- **MAJOR**: Incompatible API changes
+- **MINOR**: New functionality (backward-compatible)
+- **PATCH**: Bug fixes (backward-compatible)
+
+---
+
+## Stay Updated
+
+- Watch the [GitHub repository](https://github.com/Finsys/dockhand) for releases
+- Subscribe to [GitHub Releases](https://github.com/Finsys/dockhand/releases)
+- Follow updates on [dockhand.pro](https://dockhand.pro)
+
+---
+
+*Note: This changelog covers major releases and features. For detailed commit history, see the [GitHub repository](https://github.com/Finsys/dockhand).*

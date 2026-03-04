@@ -1,0 +1,335 @@
+---
+title: Container Lifecycle
+description: Control container lifecycle operations - start, stop, restart, pause, and unpause
+---
+
+## Start Container
+
+<RequestExample>
+```bash
+POST /api/containers/{id}/start?env=1
+```
+</RequestExample>
+
+Starts a stopped container.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name to start
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the container was successfully started
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Container started successfully
+- `403` - Permission denied or environment access denied
+- `500` - Failed to start container
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X POST "https://your-dockhand.com/api/containers/abc123def456/start?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/start?env=1`, {
+  method: 'POST',
+  credentials: 'include'
+});
+
+const result = await response.json();
+console.log(result);
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true
+}
+```
+
+## Stop Container
+
+<RequestExample>
+```bash
+POST /api/containers/{id}/stop?env=1
+```
+</RequestExample>
+
+Stops a running container by sending SIGTERM and then SIGKILL after a grace period.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name to stop
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the container was successfully stopped
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Container stopped successfully
+- `403` - Permission denied or environment access denied
+- `500` - Failed to stop container
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X POST "https://your-dockhand.com/api/containers/abc123def456/stop?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/stop?env=1`, {
+  method: 'POST',
+  credentials: 'include'
+});
+
+const result = await response.json();
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true
+}
+```
+
+## Restart Container
+
+<RequestExample>
+```bash
+POST /api/containers/{id}/restart?env=1
+```
+</RequestExample>
+
+Restarts a container. This is equivalent to stopping and then starting the container.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name to restart
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the container was successfully restarted
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Container restarted successfully
+- `403` - Permission denied or environment access denied
+- `500` - Failed to restart container
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X POST "https://your-dockhand.com/api/containers/abc123def456/restart?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/restart?env=1`, {
+  method: 'POST',
+  credentials: 'include'
+});
+
+const result = await response.json();
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true
+}
+```
+
+## Pause Container
+
+<RequestExample>
+```bash
+POST /api/containers/{id}/pause?env=1
+```
+</RequestExample>
+
+Pauses all processes within a container using cgroups freezer. The container continues to exist and hold its resources, but all processes are suspended.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name to pause
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the container was successfully paused
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Container paused successfully
+- `403` - Permission denied (requires 'stop' permission)
+- `500` - Failed to pause container
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X POST "https://your-dockhand.com/api/containers/abc123def456/pause?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/pause?env=1`, {
+  method: 'POST',
+  credentials: 'include'
+});
+
+const result = await response.json();
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true
+}
+```
+
+## Unpause Container
+
+<RequestExample>
+```bash
+POST /api/containers/{id}/unpause?env=1
+```
+</RequestExample>
+
+Resumes all processes that were previously paused in a container.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name to unpause
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the container was successfully unpaused
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Container unpaused successfully
+- `403` - Permission denied (requires 'start' permission)
+- `500` - Failed to unpause container
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X POST "https://your-dockhand.com/api/containers/abc123def456/unpause?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/unpause?env=1`, {
+  method: 'POST',
+  credentials: 'include'
+});
+
+const result = await response.json();
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true
+}
+```

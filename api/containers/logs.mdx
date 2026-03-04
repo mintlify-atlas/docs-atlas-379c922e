@@ -1,0 +1,234 @@
+---
+title: Container Logs
+description: Retrieve and stream container logs
+---
+
+## Get Container Logs
+
+<RequestExample>
+```bash
+GET /api/containers/{id}/logs?env=1&tail=100
+```
+</RequestExample>
+
+Retrieves the most recent log entries from a container. Returns logs as a single response.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+<ParamField query="tail" type="number" default="100">
+  Number of lines to retrieve from the end of the logs
+</ParamField>
+
+### Response
+
+<ResponseField name="logs" type="string">
+  The container log output as a string
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+<ResponseField name="details" type="string">
+  Additional error details
+</ResponseField>
+
+**Status Codes:**
+- `200` - Success
+- `403` - Permission denied
+- `500` - Failed to get container logs
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X GET "https://your-dockhand.com/api/containers/abc123def456/logs?env=1&tail=100" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/logs?env=1&tail=100`, {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const data = await response.json();
+console.log(data.logs);
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "logs": "2024-01-15T10:30:00.000Z Starting application...\n2024-01-15T10:30:01.000Z Server listening on port 3000\n2024-01-15T10:30:15.000Z GET /api/health 200\n"
+}
+```
+
+## Stream Container Logs
+
+<RequestExample>
+```bash
+GET /api/containers/{id}/logs/stream?env=1&tail=100
+```
+</RequestExample>
+
+Streams container logs in real-time using Server-Sent Events (SSE). This endpoint provides live log output as the container generates it.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+<ParamField query="tail" type="number" default="100">
+  Number of historical log lines to retrieve before starting the stream
+</ParamField>
+
+### Response Format
+
+The endpoint returns a Server-Sent Events (SSE) stream with the following event types:
+
+**Event: `connected`**
+
+Emitted immediately when the stream connection is established.
+
+<ResponseField name="containerId" type="string">
+  The container ID
+</ResponseField>
+
+<ResponseField name="containerName" type="string">
+  The container name
+</ResponseField>
+
+<ResponseField name="hasTty" type="boolean">
+  Whether the container has TTY enabled
+</ResponseField>
+
+**Event: `log`**
+
+Emitted for each log line from the container.
+
+<ResponseField name="text" type="string">
+  The log line text
+</ResponseField>
+
+<ResponseField name="containerName" type="string">
+  The container name
+</ResponseField>
+
+<ResponseField name="stream" type="string">
+  The output stream - either "stdout" or "stderr" (only present for non-TTY containers)
+</ResponseField>
+
+**Event: `end`**
+
+Emitted when the log stream ends (e.g., container stopped).
+
+<ResponseField name="reason" type="string">
+  Reason the stream ended
+</ResponseField>
+
+**Event: `error`**
+
+Emitted if an error occurs during streaming.
+
+<ResponseField name="error" type="string">
+  Error message
+</ResponseField>
+
+### Error Responses
+
+**Status Codes:**
+- `200` - SSE stream established
+- `403` - Permission denied
+- `503` - Edge agent not connected (for Hawser Edge environments)
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X GET "https://your-dockhand.com/api/containers/abc123def456/logs/stream?env=1&tail=100" \
+  -H "Cookie: session=your-session-cookie" \
+  -H "Accept: text/event-stream"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const eventSource = new EventSource(
+  `/api/containers/${containerId}/logs/stream?env=1&tail=100`
+);
+
+eventSource.addEventListener('connected', (event) => {
+  const data = JSON.parse(event.data);
+  console.log(`Connected to ${data.containerName}`);
+});
+
+eventSource.addEventListener('log', (event) => {
+  const data = JSON.parse(event.data);
+  const prefix = data.stream === 'stderr' ? '[ERROR]' : '[INFO]';
+  console.log(`${prefix} ${data.text}`);
+});
+
+eventSource.addEventListener('end', (event) => {
+  const data = JSON.parse(event.data);
+  console.log(`Stream ended: ${data.reason}`);
+  eventSource.close();
+});
+
+eventSource.addEventListener('error', (event) => {
+  console.error('Stream error:', event);
+  eventSource.close();
+});
+```
+</CodeGroup>
+
+### Response Example
+
+```
+event: connected
+data: {"containerId":"abc123def456","containerName":"my-nginx","hasTty":false}
+
+event: log
+data: {"text":"2024-01-15T10:30:00.000Z Starting application...\n","containerName":"my-nginx","stream":"stdout"}
+
+event: log
+data: {"text":"2024-01-15T10:30:01.000Z Server listening on port 3000\n","containerName":"my-nginx","stream":"stdout"}
+
+event: log
+data: {"text":"2024-01-15T10:30:15.000Z GET /api/health 200\n","containerName":"my-nginx","stream":"stdout"}
+
+: keepalive
+
+event: log
+data: {"text":"2024-01-15T10:30:30.000Z Warning: High memory usage\n","containerName":"my-nginx","stream":"stderr"}
+
+```
+
+### Notes
+
+- Keepalive comments (`: keepalive`) are sent every 5 seconds to maintain the connection through proxies like Traefik
+- For containers with TTY enabled, the `stream` field is not present in log events
+- For non-TTY containers, Docker multiplexes stdout and stderr which are demultiplexed by the API
+- The stream follows logs in real-time until the client disconnects or the container stops
+- Both stdout and stderr streams are included in the output
+- Timestamps are included if the container was configured with `--log-opt timestamps=true`

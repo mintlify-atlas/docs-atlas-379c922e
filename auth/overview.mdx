@@ -1,0 +1,290 @@
+---
+title: Authentication Overview
+description: Secure your Dockhand instance with flexible authentication options
+---
+
+Dockhand provides enterprise-grade authentication and security features to protect your Docker infrastructure. Choose from local authentication, OIDC/SSO integration, or LDAP directory services.
+
+## Authentication System
+
+Dockhand's authentication system is designed with security and flexibility in mind:
+
+- **Optional Authentication** - Run without auth for trusted environments, or enable it for multi-user deployments
+- **Multiple Providers** - Support for local users, OIDC/SSO, and LDAP (Enterprise)
+- **Strong Security** - Argon2id password hashing, secure session management, and optional 2FA
+- **Session Management** - Configurable session timeouts with HttpOnly, Secure, and SameSite cookies
+
+## Edition Comparison
+
+<table>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>Free Edition</th>
+      <th>Enterprise Edition</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Local Users</td>
+      <td>✅</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>OIDC/SSO Integration</td>
+      <td>✅</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Two-Factor Authentication</td>
+      <td>✅</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>LDAP/Active Directory</td>
+      <td>❌</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Role-Based Access Control</td>
+      <td>❌</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>Audit Logging</td>
+      <td>❌</td>
+      <td>✅</td>
+    </tr>
+  </tbody>
+</table>
+
+## Security Features
+
+### Password Security
+
+- **Argon2id Hashing** - Memory-hard algorithm resistant to GPU attacks
+- **Custom Parameters** - 64MB memory cost, 3 iterations, 256-bit output
+- **Timing Attack Protection** - Constant-time comparison prevents username enumeration
+
+### Session Security
+
+- **Cryptographically Secure Tokens** - 256-bit random session IDs
+- **HttpOnly Cookies** - Prevents XSS attacks from reading session tokens
+- **SameSite=Strict** - CSRF protection
+- **Secure Flag** - Automatic HTTPS detection via `x-forwarded-proto` header
+- **Configurable Timeouts** - 1 hour to 7 days (default: 24 hours)
+
+### Rate Limiting
+
+- **Failed Login Protection** - 5 attempts per 15 minutes
+- **15 Minute Lockout** - Automatic lockout after threshold
+- **IP + Username Tracking** - Per-user rate limiting
+
+## Initial Setup
+
+### 1. Enable Authentication
+
+Navigate to **Settings > Authentication** in the Dockhand UI:
+
+```bash
+# Or enable via API
+curl -X PUT http://localhost:8000/api/auth/settings \
+  -H "Content-Type: application/json" \
+  -d '{"authEnabled": true}'
+```
+
+### 2. Create First Admin User
+
+When authentication is enabled but no users exist, Dockhand allows creating the first admin user:
+
+```bash
+curl -X POST http://localhost:8000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "password": "your-secure-password",
+    "email": "admin@example.com"
+  }'
+```
+
+The first user automatically receives the Admin role.
+
+### 3. Configure Session Timeout
+
+Adjust session timeout in Settings > Authentication:
+
+- **Minimum**: 1 hour (3600 seconds)
+- **Maximum**: 7 days (604800 seconds)
+- **Default**: 24 hours (86400 seconds)
+
+## Authentication Flow
+
+### Local Authentication
+
+1. User submits username and password
+2. System verifies credentials using Argon2id
+3. If 2FA enabled, user must provide TOTP code
+4. Session created with secure cookie
+5. User redirected to dashboard
+
+### OIDC/SSO Authentication
+
+1. User clicks "Sign in with [Provider]"
+2. Redirected to Identity Provider (IdP)
+3. User authenticates with IdP
+4. IdP redirects back with authorization code
+5. Dockhand exchanges code for tokens
+6. User account created/updated from claims
+7. Session created and user logged in
+
+### LDAP Authentication
+
+1. User submits username and password
+2. System searches LDAP directory for user DN
+3. Binds as user to verify password
+4. Retrieves user attributes (email, display name)
+5. Checks group membership for admin/role assignment
+6. Local user account created/synced
+7. Session created and user logged in
+
+## Configuration Files
+
+Dockhand stores authentication settings in the SQLite/PostgreSQL database:
+
+- `auth_settings` - Global auth configuration
+- `users` - Local user accounts
+- `sessions` - Active user sessions
+- `oidc_config` - OIDC provider configurations
+- `ldap_config` - LDAP directory configurations (Enterprise)
+
+## Environment Variables
+
+<ParamField path="COOKIE_SECURE" type="boolean" default="auto">
+  Force Secure flag on session cookies. Set to `true` for HTTPS, `false` for HTTP.
+  Defaults to auto-detection via `x-forwarded-proto` header.
+</ParamField>
+
+<ParamField path="DISABLE_LOCAL_LOGIN" type="boolean" default="false">
+  Disable local username/password authentication. Useful for SSO-only deployments.
+</ParamField>
+
+<ParamField path="DOCKHAND_HOSTNAME" type="string" default="os.hostname()">
+  Hostname used for 2FA issuer name and license validation.
+</ParamField>
+
+## Public Endpoints
+
+These endpoints are always accessible without authentication:
+
+- `/login` - Login page
+- `/api/auth/login` - Authentication endpoint
+- `/api/auth/logout` - Logout endpoint
+- `/api/auth/session` - Session validation
+- `/api/auth/settings` - Auth configuration (read-only when auth disabled)
+- `/api/auth/providers` - List available auth providers
+- `/api/auth/oidc/callback` - OIDC callback handler
+- `/api/health` - Health check endpoint
+- `/api/git/*/webhook` - Git webhook receivers (signature verification)
+
+## Security Best Practices
+
+### For Production Deployments
+
+1. **Always Enable HTTPS**
+   - Use a reverse proxy (Traefik, Nginx, Caddy)
+   - Set `x-forwarded-proto: https` header
+   - Verify `Secure` flag is set on cookies
+
+2. **Use Strong Passwords**
+   - Minimum 12 characters
+   - Mix of uppercase, lowercase, numbers, symbols
+   - Consider using a password manager
+
+3. **Enable 2FA for Admins**
+   - All admin accounts should use TOTP
+   - Store backup codes securely
+   - Test recovery process
+
+4. **Configure Session Timeout**
+   - Balance security vs. convenience
+   - Shorter timeouts (4 hours) for sensitive environments
+   - Longer timeouts (7 days) for trusted networks
+
+5. **Monitor Authentication Logs**
+   - Review server logs for failed login attempts
+   - Watch for unusual IP addresses
+   - Enable audit logging (Enterprise)
+
+### For SSO Deployments
+
+1. **Disable Local Login**
+   - Set `DISABLE_LOCAL_LOGIN=true`
+   - Forces all users through IdP
+   - Prevents password-based attacks
+
+2. **Configure Role Mappings**
+   - Map IdP groups to Dockhand roles
+   - Automate role assignment
+   - Keep permissions in sync with IdP
+
+3. **Test Failure Scenarios**
+   - What happens if IdP is down?
+   - Can admins still access via local account?
+   - Consider keeping one local admin as backup
+
+## Troubleshooting
+
+### Login Loop on HTTP
+
+If you experience a login loop when accessing Dockhand over HTTP:
+
+```bash
+# Set COOKIE_SECURE=false
+docker run -e COOKIE_SECURE=false dockhand/dockhand:latest
+```
+
+This happens when Dockhand is behind a reverse proxy without proper headers.
+
+### Session Expires Immediately
+
+Check session timeout configuration:
+
+```bash
+# Query current settings
+curl http://localhost:8000/api/auth/settings
+
+# Update timeout to 7 days
+curl -X PUT http://localhost:8000/api/auth/settings \
+  -H "Content-Type: application/json" \
+  -d '{"sessionTimeout": 604800}'
+```
+
+### Can't Create First User
+
+Ensure authentication is enabled:
+
+```bash
+# Check auth status
+curl http://localhost:8000/api/auth/settings
+
+# Enable auth
+curl -X PUT http://localhost:8000/api/auth/settings \
+  -d '{"authEnabled": true}'
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Local Users" icon="user" href="/auth/local-users">
+    Manage local user accounts and passwords
+  </Card>
+  <Card title="OIDC/SSO" icon="shield-halved" href="/auth/oidc">
+    Integrate with your Identity Provider
+  </Card>
+  <Card title="Two-Factor Auth" icon="mobile" href="/auth/2fa">
+    Add TOTP-based 2FA for enhanced security
+  </Card>
+  <Card title="RBAC" icon="users-gear" href="/auth/rbac">
+    Configure role-based access control (Enterprise)
+  </Card>
+</CardGroup>

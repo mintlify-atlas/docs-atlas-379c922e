@@ -1,0 +1,166 @@
+---
+title: 'List Stacks'
+api: 'GET /api/stacks'
+description: 'Retrieve all compose stacks for an environment'
+---
+
+## Query Parameters
+
+<ParamField query="env" type="string" required>
+  Environment ID to list stacks from
+</ParamField>
+
+## Response
+
+Returns an array of compose stack objects.
+
+<ResponseField name="name" type="string">
+  Stack name
+</ResponseField>
+
+<ResponseField name="containers" type="array">
+  Array of container IDs in the stack
+</ResponseField>
+
+<ResponseField name="containerDetails" type="array">
+  Detailed information about each container
+  
+  <Expandable title="Container Details">
+    <ResponseField name="id" type="string">
+      Container ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Container name
+    </ResponseField>
+    
+    <ResponseField name="service" type="string">
+      Service name from compose file
+    </ResponseField>
+    
+    <ResponseField name="state" type="string">
+      Container state (running, stopped, etc.)
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Human-readable status
+    </ResponseField>
+    
+    <ResponseField name="health" type="string">
+      Health check status (if configured)
+    </ResponseField>
+    
+    <ResponseField name="image" type="string">
+      Container image
+    </ResponseField>
+    
+    <ResponseField name="ports" type="array">
+      Port mappings
+    </ResponseField>
+    
+    <ResponseField name="networks" type="array">
+      Network connections
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Overall stack status: `running`, `stopped`, `partial`, or `created`
+</ResponseField>
+
+<ResponseField name="sourceType" type="string">
+  Stack source type: `internal`, `git`, or `external`
+</ResponseField>
+
+## Response Behavior
+
+- Returns an empty array if no environment ID is provided
+- Returns stacks from both Docker and database
+- Includes stacks that are currently stopped (status: `created`)
+- Silently returns empty array for offline environments
+
+<RequestExample>
+
+```bash cURL
+curl -X GET "https://your-dockhand-instance.com/api/stacks?env=1" \
+  -H "Cookie: auth_token=your_token"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/stacks?env=1', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const stacks = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Response
+[
+  {
+    "name": "my-app",
+    "containers": ["abc123", "def456"],
+    "containerDetails": [
+      {
+        "id": "abc123",
+        "name": "my-app-web-1",
+        "service": "web",
+        "state": "running",
+        "status": "Up 2 hours",
+        "health": "healthy",
+        "image": "nginx:latest",
+        "ports": [
+          {
+            "publicPort": 8080,
+            "privatePort": 80,
+            "type": "tcp",
+            "display": "8080:80/tcp"
+          }
+        ],
+        "networks": [
+          {
+            "name": "my-app_default",
+            "ipAddress": "172.18.0.2"
+          }
+        ],
+        "volumeCount": 1,
+        "restartCount": 0,
+        "created": 1709568000
+      }
+    ],
+    "status": "running",
+    "sourceType": "internal"
+  },
+  {
+    "name": "database",
+    "containers": [],
+    "containerDetails": [],
+    "status": "created",
+    "sourceType": "git"
+  }
+]
+```
+
+</ResponseExample>
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message
+</ResponseField>
+
+### 403 Forbidden
+
+Returned when the user lacks permission to view stacks or access the environment.
+
+### 404 Not Found
+
+Returned when the specified environment does not exist.
+
+## Permissions
+
+Requires `stacks:view` permission for the specified environment.

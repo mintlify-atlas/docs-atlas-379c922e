@@ -1,0 +1,322 @@
+---
+title: 'Prune Images'
+description: 'Remove unused Docker images to free disk space'
+icon: 'broom'
+---
+
+## Overview
+
+Remove unused Docker images from an environment to reclaim disk space. Supports pruning dangling images (untagged) or all unused images (including tagged images not used by any container).
+
+## Endpoint
+
+```bash
+POST /api/prune/images?env={environmentId}&dangling={true|false}
+```
+
+## Query Parameters
+
+<ParamField query="env" type="integer">
+  Environment ID to prune images from. Optional for local environments.
+</ParamField>
+
+<ParamField query="dangling" type="boolean" default="true">
+  Prune mode:
+  - `true` or omitted: Remove only dangling images (untagged)
+  - `false`: Remove all unused images including tagged ones
+</ParamField>
+
+## Authentication
+
+Requires `images:remove` permission for the specified environment.
+
+## Response Format
+
+Returns job ID for progress tracking:
+
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+## Result Format
+
+The final result contains deleted images and space reclaimed:
+
+```json
+{
+  "success": true,
+  "result": {
+    "ImagesDeleted": [
+      {
+        "Deleted": "sha256:abc123..."
+      },
+      {
+        "Deleted": "sha256:def456..."
+      },
+      {
+        "Untagged": "nginx:old"
+      }
+    ],
+    "SpaceReclaimed": 524288000
+  }
+}
+```
+
+## Response Fields
+
+<ResponseField name="ImagesDeleted" type="array">
+  Array of deleted/untagged image objects:
+  - `Deleted`: Image SHA256 that was removed
+  - `Untagged`: Image tag that was removed
+</ResponseField>
+
+<ResponseField name="SpaceReclaimed" type="integer">
+  Total disk space reclaimed in bytes
+</ResponseField>
+
+## Prune Modes
+
+### Dangling Only (default)
+
+Removes only untagged images (labeled `<none>:<none>`):
+
+```bash
+POST /api/prune/images?env=1
+# or explicitly
+POST /api/prune/images?env=1&dangling=true
+```
+
+This is the safest option and matches Docker CLI default behavior:
+
+```bash
+docker image prune
+```
+
+### All Unused Images
+
+Removes all images not currently used by any container:
+
+```bash
+POST /api/prune/images?env=1&dangling=false
+```
+
+Equivalent to Docker CLI:
+
+```bash
+docker image prune -a
+```
+
+<Warning>
+Pruning with `dangling=false` will remove all unused images including tagged ones. This can remove images you may want to keep for quick container creation.
+</Warning>
+
+## Implementation
+
+```typescript:src/routes/api/prune/images/+server.ts
+export const POST: RequestHandler = async (event) => {
+  const { url, cookies } = event;
+  const auth = await authorize(cookies);
+  
+  const envId = url.searchParams.get('env');
+  const envIdNum = envId ? parseInt(envId) : undefined;
+  const danglingOnly = url.searchParams.get('dangling') !== 'false';
+  
+  // Permission check with environment context
+  if (auth.authEnabled && !await auth.can('images', 'remove', envIdNum)) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+  
+  return createJobResponse(async (send) => {
+    try {
+      const result = await pruneImages(danglingOnly, envIdNum);
+      
+      // Audit log
+      await audit(event, 'prune', 'image', {
+        environmentId: envIdNum,
+        description: `Pruned ${danglingOnly ? 'dangling' : 'unused'} images`,
+        details: { danglingOnly, result }
+      });
+      
+      send('result', { success: true, result });
+    } catch (error) {
+      console.error('Error pruning images:', error);
+      send('result', { success: false, error: 'Failed to prune images' });
+    }
+  }, event.request);
+};
+```
+
+## Docker API Integration
+
+The prune operation uses Docker's native prune API:
+
+```typescript:src/lib/server/docker.ts
+export async function pruneImages(dangling = true, envId?: number | null) {
+  // dangling=true: only remove untagged images (default Docker behavior)
+  // dangling=false: remove ALL unused images including tagged ones
+  // Docker API quirk: to remove all unused, we pass dangling=false filter
+  const filters = dangling ? '{"dangling":["true"]}' : '{"dangling":["false"]}';
+  return dockerJsonRequest(
+    `/images/prune?filters=${encodeURIComponent(filters)}`,
+    { method: 'POST' },
+    envId
+  );
+}
+```
+
+<Note>
+Docker API uses `dangling=false` to prune all unused images, which is counterintuitive. The filter specifies what to keep, not what to remove.
+</Note>
+
+## Usage Examples
+
+### Prune Dangling Images
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/prune/images?env=1' \
+  -H 'Cookie: session=...'
+```
+
+### Prune All Unused Images
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/prune/images?env=1&dangling=false' \
+  -H 'Cookie: session=...'
+```
+
+### Track Prune Progress
+
+```typescript
+const response = await fetch('/api/prune/images?env=1', {
+  method: 'POST'
+});
+
+const { jobId } = await response.json();
+
+const eventSource = new EventSource(`/api/jobs/${jobId}`);
+eventSource.addEventListener('result', (e) => {
+  const result = JSON.parse(e.data);
+  
+  if (result.success) {
+    const spaceGB = (result.result.SpaceReclaimed / 1024 / 1024 / 1024).toFixed(2);
+    const count = result.result.ImagesDeleted?.length || 0;
+    console.log(`Pruned ${count} images, reclaimed ${spaceGB} GB`);
+  } else {
+    console.error('Prune failed:', result.error);
+  }
+  
+  eventSource.close();
+});
+```
+
+### Automated Cleanup Script
+
+```typescript
+async function cleanupOldImages(environmentId: number) {
+  // First, check available disk space
+  const stats = await fetch(`/api/system/stats?env=${environmentId}`);
+  const { disk } = await stats.json();
+  
+  // If disk usage is above 80%, prune all unused images
+  if (disk.usagePercent > 80) {
+    console.log('Disk usage high, pruning all unused images...');
+    await fetch(`/api/prune/images?env=${environmentId}&dangling=false`, {
+      method: 'POST'
+    });
+  } else {
+    // Otherwise, just prune dangling images
+    await fetch(`/api/prune/images?env=${environmentId}`, {
+      method: 'POST'
+    });
+  }
+}
+```
+
+## Error Responses
+
+<ResponseField name="403" type="object">
+  Permission denied - user lacks `images:remove` permission
+  ```json
+  { "error": "Permission denied" }
+  ```
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Prune operation failed
+  ```json
+  {
+    "success": false,
+    "error": "Failed to prune images"
+  }
+  ```
+</ResponseField>
+
+## Scheduled Pruning
+
+Dockhand supports automatic image pruning via the scheduler:
+
+```typescript:src/lib/server/scheduler/tasks/image-prune.ts
+// Scheduled task runs periodically to prune dangling images
+export async function imagePruneTask() {
+  const environments = await getEnvironments();
+  
+  for (const env of environments) {
+    if (env.autoPrune) {
+      await pruneImages(true, env.id);
+    }
+  }
+}
+```
+
+Configure auto-prune in environment settings.
+
+## Audit Logging
+
+Prune operations are logged with full details:
+
+```typescript
+await audit(event, 'prune', 'image', {
+  environmentId: envIdNum,
+  description: `Pruned ${danglingOnly ? 'dangling' : 'unused'} images`,
+  details: { danglingOnly, result }
+});
+```
+
+Audit logs include:
+- Number of images removed
+- Space reclaimed
+- Prune mode (dangling vs all unused)
+- User who initiated the operation
+
+## Related Operations
+
+- [List Images](/api/images/list) - View available images
+- [Delete Image](/api/images/delete) - Remove specific images
+- [System Prune](/api/prune/system) - Prune all unused resources
+- [Storage Management](/features/storage) - Monitor disk usage
+
+## Best Practices
+
+1. **Regular Dangling Prune**: Run dangling-only prune regularly (daily/weekly) to remove build artifacts
+
+2. **Conservative All-Unused Prune**: Only use `dangling=false` when disk space is critically low
+
+3. **Monitor Impact**: Check `SpaceReclaimed` to track cleanup effectiveness
+
+4. **Automated Cleanup**: Configure scheduled pruning in environment settings
+
+5. **Pre-deployment Prune**: Prune before deploying new images to ensure available space
+
+6. **Combine with System Prune**: For maximum space recovery, use system-wide prune operations
+
+## Notes
+
+- Prune operations only affect unused images
+- Images referenced by containers (running or stopped) are never pruned
+- Dangling images are typically intermediate build layers
+- Tagged images are only removed with `dangling=false`
+- Operations are atomic - either all images are pruned or none
+- Space reclaimed includes all image layers no longer referenced
+- Audit logs track all prune operations for compliance

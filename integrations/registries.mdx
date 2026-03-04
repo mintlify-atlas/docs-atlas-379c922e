@@ -1,0 +1,446 @@
+---
+title: 'Container Registries'
+description: 'Connect to Docker Hub, GHCR, and private container registries'
+icon: 'box'
+---
+
+Dockhand supports multiple container registries for pulling and searching images. Connect to Docker Hub, GitHub Container Registry (GHCR), private registries, or any Docker Registry V2 compatible service.
+
+## Supported Registries
+
+<CardGroup cols={2}>
+  <Card title="Docker Hub" icon="docker">
+    Public and private images from the official Docker registry
+  </Card>
+  <Card title="GitHub Container Registry" icon="github">
+    Container images stored in GitHub packages
+  </Card>
+  <Card title="Private Registries" icon="lock">
+    Self-hosted or third-party Docker Registry V2 compatible
+  </Card>
+  <Card title="Cloud Registries" icon="cloud">
+    AWS ECR, Google GCR, Azure ACR, and more
+  </Card>
+</CardGroup>
+
+## Configuration
+
+### Docker Hub
+
+Docker Hub is available by default without configuration. For private images, add authentication:
+
+<Steps>
+  <Step title="Navigate to registries">
+    Go to **Settings** > **Registries** > **Add Registry**
+  </Step>
+  
+  <Step title="Enter credentials">
+    ```yaml
+    Name: Docker Hub
+    URL: https://registry-1.docker.io
+    Username: your-username
+    Password: your-password-or-token
+    ```
+    
+    <Tip>
+      Use a [Docker Hub access token](https://hub.docker.com/settings/security) instead of your password for better security.
+    </Tip>
+  </Step>
+  
+  <Step title="Test connection">
+    Click **Test Connection** to verify credentials work correctly.
+  </Step>
+</Steps>
+
+### GitHub Container Registry
+
+Connect to GHCR for images stored in GitHub packages:
+
+```yaml Registry Configuration
+Name: GitHub Container Registry
+URL: https://ghcr.io
+Username: your-github-username
+Password: ghp_xxxxxxxxxxxx
+```
+
+<Warning>
+  Use a GitHub Personal Access Token (classic) with `read:packages` scope, not your GitHub password.
+</Warning>
+
+#### Generating GitHub Token
+
+1. Go to GitHub **Settings** > **Developer settings** > **Personal access tokens** > **Tokens (classic)**
+2. Click **Generate new token (classic)**
+3. Select scope: `read:packages` (and `write:packages` if pushing images)
+4. Copy the token (shown only once)
+
+### Private Registry
+
+Connect to any Docker Registry V2 compatible private registry:
+
+```yaml
+Name: Company Registry
+URL: https://registry.company.com
+Username: service-account
+Password: secret-token
+```
+
+#### Common Registry URLs
+
+<Tabs>
+  <Tab title="Harbor">
+    ```
+    https://harbor.example.com
+    ```
+    Harbor projects require the project name in image references:
+    ```
+    harbor.example.com/project-name/image:tag
+    ```
+  </Tab>
+  
+  <Tab title="GitLab Registry">
+    ```
+    https://registry.gitlab.com
+    ```
+    Use GitLab username and a [Personal Access Token](https://gitlab.com/-/profile/personal_access_tokens) with `read_registry` scope.
+  </Tab>
+  
+  <Tab title="JFrog Artifactory">
+    ```
+    https://artifactory.example.com
+    ```
+    Use Artifactory username and either password or API key.
+  </Tab>
+  
+  <Tab title="Nexus Repository">
+    ```
+    https://nexus.example.com:8082
+    ```
+    Configure Docker (hosted) repository and use Nexus credentials.
+  </Tab>
+</Tabs>
+
+### Cloud Registries
+
+<AccordionGroup>
+  <Accordion title="AWS ECR" icon="aws">
+    AWS Elastic Container Registry requires temporary credentials:
+    
+    ```bash
+    # Get login credentials (valid for 12 hours)
+    aws ecr get-login-password --region us-east-1
+    ```
+    
+    Then configure in Dockhand:
+    ```yaml
+    Name: AWS ECR
+    URL: https://123456789.dkr.ecr.us-east-1.amazonaws.com
+    Username: AWS
+    Password: <output from get-login-password>
+    ```
+    
+    <Warning>
+      ECR credentials expire after 12 hours. For production use, automate credential refresh or use [ECR credential helper](https://github.com/awslabs/amazon-ecr-credential-helper).
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="Google Container Registry" icon="google">
+    Configure GCR using a service account:
+    
+    ```yaml
+    Name: Google GCR
+    URL: https://gcr.io
+    Username: _json_key
+    Password: <contents of service-account.json>
+    ```
+    
+    The password should be the entire JSON key file content.
+  </Accordion>
+  
+  <Accordion title="Azure Container Registry" icon="microsoft">
+    Enable admin user in ACR, then configure:
+    
+    ```yaml
+    Name: Azure ACR
+    URL: https://myregistry.azurecr.io
+    Username: myregistry
+    Password: <admin-password>
+    ```
+    
+    Or use service principal for better security.
+  </Accordion>
+</AccordionGroup>
+
+## Registry Schema
+
+The registry configuration uses the following database schema:
+
+```typescript
+interface Registry {
+  id: number;
+  name: string;           // Display name
+  url: string;            // Registry URL (e.g., https://ghcr.io)
+  username?: string;      // Optional username for authentication
+  password?: string;      // Optional password/token for authentication
+  isDefault: boolean;     // Mark as default registry for pulls
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Using Registries
+
+### Searching Images
+
+<Steps>
+  <Step title="Open image browser">
+    Navigate to **Images** > **Browse Registry**
+  </Step>
+  
+  <Step title="Select registry">
+    Choose a registry from the dropdown or search all registries
+  </Step>
+  
+  <Step title="Search">
+    Enter search term and browse results
+  </Step>
+  
+  <Step title="View details">
+    Click an image to see available tags and pull it
+  </Step>
+</Steps>
+
+### Pulling Images
+
+When pulling an image, Dockhand automatically uses registry credentials:
+
+```bash
+# These are handled automatically with configured registries
+docker pull ghcr.io/user/image:latest
+docker pull registry.company.com/project/image:v1.0
+```
+
+### Image Name Format
+
+Different registries use different naming conventions:
+
+<Tabs>
+  <Tab title="Docker Hub">
+    ```
+    # Official images
+    nginx:latest
+    postgres:15-alpine
+    
+    # User images
+    username/image:tag
+    
+    # Full format
+    docker.io/library/nginx:latest
+    docker.io/username/image:tag
+    ```
+  </Tab>
+  
+  <Tab title="GHCR">
+    ```
+    ghcr.io/owner/image:tag
+    ghcr.io/organization/repository:version
+    ```
+  </Tab>
+  
+  <Tab title="Private Registry">
+    ```
+    registry.example.com/image:tag
+    registry.example.com/project/image:tag
+    ```
+  </Tab>
+</Tabs>
+
+## Registry API
+
+Dockhand uses the Docker Registry HTTP API V2:
+
+### Catalog Endpoint
+
+List all repositories:
+
+```bash
+GET /v2/_catalog
+```
+
+Response:
+```json
+{
+  "repositories": [
+    "namespace/image1",
+    "namespace/image2"
+  ]
+}
+```
+
+### Tags Endpoint
+
+List tags for an image:
+
+```bash
+GET /v2/{name}/tags/list
+```
+
+Response:
+```json
+{
+  "name": "namespace/image",
+  "tags": ["latest", "v1.0", "v2.0"]
+}
+```
+
+### Search Endpoint
+
+Docker Hub search:
+
+```bash
+GET https://hub.docker.com/v2/search/repositories/?query=nginx
+```
+
+<Note>
+  Private registries don't have a search API. Dockhand searches by filtering the catalog list.
+</Note>
+
+## Authentication Methods
+
+Dockhand supports multiple authentication methods:
+
+### Basic Authentication
+
+Most common method using username and password/token:
+
+```http
+Authorization: Basic base64(username:password)
+```
+
+### Bearer Token
+
+For registries using OAuth2/token authentication:
+
+1. Request token from auth service
+2. Use token in subsequent requests
+
+```http
+Authorization: Bearer <token>
+```
+
+### No Authentication
+
+For public registries without authentication, leave credentials empty.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Authentication failed">
+    - Verify username and password are correct
+    - For tokens, ensure they haven't expired
+    - Check token has required permissions (read:packages, etc.)
+    - Try generating a new token
+    - Test credentials with Docker CLI:
+      ```bash
+      docker login registry.example.com
+      ```
+  </Accordion>
+  
+  <Accordion title="Registry not found">
+    - Verify registry URL is correct (including https://)
+    - Check DNS resolution: `nslookup registry.example.com`
+    - Test connectivity: `curl https://registry.example.com/v2/`
+    - Ensure firewall allows outbound HTTPS connections
+  </Accordion>
+  
+  <Accordion title="Catalog listing fails">
+    - Some registries disable catalog listing for security
+    - Use direct image search instead of browsing
+    - For Docker Hub, catalog listing is not supported
+    - Check registry permissions allow catalog access
+  </Accordion>
+  
+  <Accordion title="SSL certificate errors">
+    - For self-signed certificates, add CA to system trust store
+    - Verify certificate is valid and not expired
+    - Check certificate matches registry hostname
+    - For testing only, Docker daemon can skip verification:
+      ```json /etc/docker/daemon.json
+      {
+        "insecure-registries": ["registry.example.com:5000"]
+      }
+      ```
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+<Warning>
+  Registry credentials are stored encrypted in the database. Never share registry passwords in plain text.
+</Warning>
+
+1. **Use tokens instead of passwords** when available (GitHub, Docker Hub, GitLab)
+2. **Rotate credentials regularly** (every 90 days)
+3. **Use read-only tokens** when Dockhand doesn't need push access
+4. **Enable HTTPS** for all private registries
+5. **Audit registry access** regularly to detect unauthorized usage
+6. **Use separate credentials** for different environments (dev/staging/prod)
+
+## Advanced Configuration
+
+### Organization Filtering
+
+For registries with many repositories, filter by organization:
+
+```yaml
+Name: GitHub Org
+URL: https://ghcr.io/myorg
+Username: username
+Password: token
+```
+
+This limits searches and catalog browsing to the `myorg` namespace.
+
+### Multiple Registry Instances
+
+Configure multiple entries for the same registry with different credentials:
+
+```yaml
+# Production access
+Name: Company Registry (Prod)
+URL: https://registry.company.com
+Username: prod-readonly
+Password: token1
+
+# Development access
+Name: Company Registry (Dev)
+URL: https://registry.company.com
+Username: dev-user
+Password: token2
+```
+
+### Default Registry
+
+Set one registry as default for image operations:
+
+1. Edit registry settings
+2. Enable **Set as default**
+3. Images without registry prefix will use this registry
+
+## Performance Considerations
+
+- **Catalog caching**: Large registries cache catalog for 5 minutes
+- **Search limits**: Registry searches return max 100 results
+- **Pagination**: Catalog browsing uses pagination (100 items per page)
+- **Direct lookup**: Searching with full image name (`org/image`) is faster than partial searches
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Image Management" icon="images" href="/features/images">
+    Learn about pulling and managing images
+  </Card>
+  <Card title="Container Deployment" icon="rocket" href="/features/containers">
+    Deploy containers from registry images
+  </Card>
+</CardGroup>

@@ -1,0 +1,414 @@
+---
+title: 'Networks'
+description: 'Create and manage Docker networks with bridge, host, overlay, and custom drivers'
+icon: 'network'
+---
+
+## Overview
+
+The Networks page provides management of Docker networks across your environments. It supports all Docker network drivers (bridge, host, overlay, macvlan, ipvlan) and enables connecting/disconnecting containers to networks with advanced configuration.
+
+## Key Features
+
+### Network Management
+
+- **All Network Types**: Support for bridge, host, overlay, macvlan, ipvlan, and custom drivers
+- **Network Drivers**: Color-coded badges for easy identification
+- **IPAM Configuration**: Manage IP address allocation (subnets, gateways, IP ranges)
+- **Network Scope**: Local, swarm, or global networks
+- **Container Connectivity**: View and manage which containers are connected
+
+### Network Operations
+
+**Create Networks**:
+- Select network driver (bridge, overlay, macvlan, etc.)
+- Configure subnet and gateway
+- Set IP range restrictions
+- Add custom driver options
+- Define labels for organization
+- Enable/disable internal mode
+- IPv6 support
+
+**Network Actions**:
+- Connect containers to networks
+- Disconnect containers from networks
+- Inspect network details (IPAM, options, containers)
+- Copy network ID to clipboard
+- Duplicate network with similar configuration
+- Remove networks (with protection for built-in networks)
+
+**Bulk Operations**:
+- Select multiple networks
+- Bulk removal of unused networks
+- Prune unused networks
+
+### Built-in Networks
+
+Docker provides three built-in networks that cannot be removed:
+- **bridge**: Default network for containers
+- **host**: Uses host's network stack directly
+- **none**: Isolated network with no connectivity
+
+### Container Connection Management
+
+**Connect Container**:
+1. Choose container from dropdown
+2. Configure network-specific settings:
+   - Custom IP address (optional)
+   - IP aliases
+   - Network aliases
+   - Links to other containers
+3. Container joins network immediately
+
+**Disconnect Container**:
+1. View containers connected to network
+2. Click disconnect icon
+3. Confirm disconnection
+4. Container removed from network
+
+### Filtering and Search
+
+- **Text Search**: Filter by network name, driver, or container names
+- **Driver Filter**: Multi-select for network drivers
+- **Scope Filter**: Filter by local, swarm, or global scope
+- **Persistent Filters**: Saved to local storage
+
+### UI Features
+
+**Network Table**:
+- Sortable columns
+- Status indicators for network state
+- Container count per network
+- IPAM configuration display
+- Quick action buttons
+
+**Driver Badges**:
+- **Bridge**: Emerald green
+- **Host**: Sky blue  
+- **Overlay**: Violet
+- **Macvlan**: Amber
+- **Ipvlan**: Orange
+- **None**: Gray
+
+## How to Use
+
+### Creating a Network
+
+1. Click the **Create** button
+2. **Basic Configuration**:
+   - Enter unique network name
+   - Select driver type
+   - Choose scope (local or swarm)
+3. **IPAM Configuration** (optional):
+   - Subnet: `172.18.0.0/16`
+   - Gateway: `172.18.0.1`
+   - IP Range: `172.18.5.0/24`
+4. **Advanced Options**:
+   - Internal network (no external connectivity)
+   - Attachable (for swarm services)
+   - Enable IPv6
+   - Custom driver options
+5. Click **Create** to create the network
+
+### Connecting a Container
+
+1. Click the **Link** icon on a network row
+2. **Select Container**:
+   - Choose from available containers
+   - Only shows containers not already on network
+3. **Network Settings** (optional):
+   - IPv4 Address: Assign static IP
+   - IPv6 Address: Assign static IPv6
+   - Aliases: DNS aliases for the container
+   - Links: Legacy container linking
+4. Click **Connect**
+5. Container immediately joins the network
+
+### Disconnecting a Container
+
+1. Expand network details (if collapsed)
+2. Find container in connected containers list
+3. Click the **Disconnect** icon
+4. Confirm disconnection
+5. Container leaves the network
+
+### Inspecting Network Details
+
+1. Click the **Eye** icon on a network row
+2. **Network Information**:
+   - Network ID
+   - Driver and scope
+   - IPAM configuration
+   - Gateway and subnet
+   - Driver options
+   - Labels
+3. **Connected Containers**:
+   - Container ID and name
+   - IPv4 and IPv6 addresses
+   - MAC address
+4. Copy any value to clipboard
+
+### Duplicating a Network
+
+1. Click the **Copy Plus** icon
+2. Network is copied with:
+   - Same driver and options
+   - New name: `{original-name}-copy`
+   - **Note**: IPAM config (subnet/gateway) is NOT copied to avoid conflicts
+3. Edit the new network to set subnet/gateway
+
+### Removing Networks
+
+**Single Network**:
+1. Click the **Remove** icon (not available for built-in networks)
+2. Confirm deletion
+3. Network is removed from Docker
+
+**Multiple Networks**:
+1. Select networks using checkboxes
+2. Click **Delete** in selection bar
+3. Confirm bulk deletion
+4. All selected networks removed
+
+**Prune Unused**:
+1. Click **Prune** button
+2. Confirms removal of all unused networks
+3. Networks with no containers are removed
+
+## UI Walkthrough
+
+### Header Section
+
+- **Title**: "Networks" with total count
+- **Search Bar**: Filter by name, driver, or containers
+- **Driver Filter**: Multi-select dropdown
+- **Scope Filter**: Multi-select dropdown
+- **Prune Button**: Remove unused networks
+- **Refresh**: Manually refresh network list
+- **Create Button**: Open network creation modal
+
+### Selection Bar
+
+Appears when networks are selected:
+- Number of selected networks
+- **Clear**: Deselect all networks
+- **Delete**: Remove selected networks (excludes built-in)
+
+### Network Table
+
+**Columns**:
+- **Checkbox**: Select for bulk operations (disabled for built-in)
+- **Name**: Network name with badges
+- **Driver**: Driver type badge
+- **Scope**: Local/Swarm/Global
+- **Subnet**: IPAM subnet configuration
+- **Gateway**: IPAM gateway address
+- **Containers**: Number of connected containers
+- **Actions**: Quick action buttons
+
+**Name Badges**:
+- **built-in**: Gray badge for Docker's default networks
+- **internal**: Outlined badge for internal-only networks
+
+**Action Icons**:
+- **Eye**: View network details
+- **Link**: Connect container to network
+- **Copy**: Copy network ID to clipboard
+- **Copy Plus**: Duplicate network configuration
+- **Remove**: Delete network (only for non-built-in)
+
+### Network Details Modal
+
+**Sections**:
+1. **Overview**:
+   - Network ID
+   - Driver and scope
+   - Created timestamp
+   - Internal flag
+   - IPv6 enabled
+
+2. **IPAM Configuration**:
+   - Driver
+   - Subnet
+   - Gateway
+   - IP Range
+   - Auxiliary addresses
+
+3. **Driver Options**:
+   - Key-value pairs
+   - Custom configuration
+
+4. **Connected Containers**:
+   - Container name (clickable)
+   - IPv4 address
+   - IPv6 address
+   - MAC address
+   - Network aliases
+
+5. **Labels**:
+   - Key-value pairs
+   - User and system labels
+
+## Real Examples
+
+### Example: Bridge Network
+
+```yaml
+Network Configuration:
+Name: app-network
+Driver: bridge
+Scope: local
+
+IPAM:
+  Subnet: 172.18.0.0/16
+  Gateway: 172.18.0.1
+  IP Range: 172.18.5.0/24
+
+Options:
+  com.docker.network.bridge.name: br-app
+  com.docker.network.bridge.enable_icc: true
+
+Connected Containers:
+  - web-server (172.18.5.10)
+  - api-server (172.18.5.11)
+  - cache (172.18.5.12)
+```
+
+### Example: Overlay Network (Swarm)
+
+```yaml
+Network Configuration:
+Name: swarm-overlay
+Driver: overlay
+Scope: swarm
+Attachable: true
+
+IPAM:
+  Subnet: 10.0.9.0/24
+  Gateway: 10.0.9.1
+
+Encryption: enabled
+
+Connected Services:
+  - frontend (replicas: 3)
+  - backend (replicas: 5)
+  - database (replicas: 1)
+```
+
+### Example: Macvlan Network
+
+```yaml
+Network Configuration:
+Name: macvlan-net
+Driver: macvlan
+Scope: local
+
+IPAM:
+  Subnet: 192.168.1.0/24
+  Gateway: 192.168.1.1
+  IP Range: 192.168.1.200/28
+
+Options:
+  parent: eth0
+  macvlan_mode: bridge
+
+Use Case:
+  Containers appear as physical devices on network
+  Direct access to network services
+  No NAT or port mapping needed
+```
+
+### Example: Internal Network
+
+```yaml
+Network Configuration:
+Name: backend-internal
+Driver: bridge
+Scope: local
+Internal: true
+
+IPAM:
+  Subnet: 172.19.0.0/16
+  Gateway: 172.19.0.1
+
+Purpose:
+  Isolated network for database and cache
+  No external internet access
+  Only accessible by other containers
+
+Connected Containers:
+  - postgres-db (172.19.0.10)
+  - redis-cache (172.19.0.11)
+```
+
+## Database Schema
+
+Networks are managed through the Docker API and don't have persistent storage in Dockhand's database. All network data is retrieved directly from Docker.
+
+**Docker API Response** includes:
+- Network ID and name
+- Driver and scope
+- IPAM configuration
+- Connected containers
+- Driver options
+- Labels
+- Creation timestamp
+
+## Technical Details
+
+### Network Drivers
+
+**Bridge**:
+- Default driver for standalone containers
+- Software bridge on host
+- Containers on same bridge can communicate
+- NAT for external connectivity
+
+**Host**:
+- No network isolation
+- Container uses host's network directly
+- No port mapping needed
+- Performance benefits
+- Security trade-offs
+
+**Overlay**:
+- Multi-host networking for Swarm
+- Encrypted traffic between hosts
+- Service discovery built-in
+- Load balancing support
+
+**Macvlan**:
+- Assign MAC address to container
+- Container appears as physical device
+- Direct connection to physical network
+- No NAT overhead
+
+**Ipvlan**:
+- Similar to macvlan
+- Uses IP addresses instead of MAC
+- Better for large deployments
+- L2 or L3 mode
+
+### IPAM (IP Address Management)
+
+- **Subnet**: CIDR notation (e.g., `172.18.0.0/16`)
+- **Gateway**: First usable IP in subnet
+- **IP Range**: Restrict IPs allocated to containers
+- **Auxiliary Addresses**: Reserved IPs for special use
+
+### Performance
+
+- **Real-Time Updates**: SSE events for network changes
+- **Lazy Loading**: Network details loaded on demand
+- **Cached Data**: Network list cached for 30 seconds
+- **Batch Operations**: Parallel execution for bulk actions
+
+### API Endpoints
+
+- `GET /api/networks` - List all networks
+- `POST /api/networks` - Create network
+- `GET /api/networks/:id` - Get network details
+- `DELETE /api/networks/:id` - Remove network
+- `POST /api/networks/:id/connect` - Connect container
+- `POST /api/networks/:id/disconnect` - Disconnect container
+- `POST /api/prune/networks` - Prune unused networks

@@ -1,0 +1,493 @@
+---
+title: 'Environments'
+description: 'Connect to Docker hosts via socket, TCP, or Hawser for multi-environment management'
+icon: 'globe'
+---
+
+## Overview
+
+Environments in Dockhand represent individual Docker hosts that you can manage. Each environment can connect to Docker via Unix socket (local), TCP/TLS (remote), or Hawser (our secure edge agent). This enables managing multiple Docker hosts from a single Dockhand instance.
+
+## Key Features
+
+### Environment Types
+
+**Socket Connection (Local)**:
+- Connects to Docker via Unix socket
+- Default path: `/var/run/docker.sock`
+- Requires Docker socket to be mounted in Dockhand container
+- Zero network overhead
+- Most secure for local Docker
+
+**Direct Connection (Remote TCP)**:
+- Connects to Docker daemon over network
+- HTTP or HTTPS with TLS certificates
+- Configure host, port, and protocol
+- Supports mutual TLS authentication
+- Good for trusted networks
+
+**Hawser Standard (Inbound)**:
+- Hawser agent connects to Dockhand
+- Agent polls for commands
+- Dockhand waits for agent connection
+- NAT/firewall friendly (outbound only from agent)
+- Secure token-based authentication
+
+**Hawser Edge (Outbound)**:
+- Dockhand connects to Hawser agent
+- Agent provides endpoint for Dockhand
+- Useful when Dockhand is in restricted network
+- Same security as Hawser Standard
+
+### Environment Management
+
+**Create Environments**:
+- Add new Docker hosts
+- Configure connection settings
+- Test connection before saving
+- Set environment name and icon
+- Organize with labels
+
+**Environment Operations**:
+- Switch between environments
+- Test connectivity
+- Edit connection settings
+- View environment details
+- Remove environments
+
+**Connection Testing**:
+- Verify Docker API access
+- Check Docker version
+- Count containers and images
+- Display host information
+- Show error messages on failure
+
+### Environment Settings
+
+**Per-Environment Configuration**:
+- **Public IP**: For generating clickable port links
+- **Activity Collection**: Enable/disable Docker event tracking
+- **Metrics Collection**: Enable/disable host metrics (CPU, memory)
+- **Highlight Changes**: Visual highlighting of resource changes
+- **Labels**: Categorize environments (production, staging, dev)
+- **Icon**: Visual identifier for environment
+
+### UI Features
+
+**Environment Selector**:
+- Dropdown in top navigation
+- Shows current environment
+- Quick switch between environments
+- Color-coded by environment
+
+**Environment Cards**:
+- Visual grid layout
+- Connection status indicator
+- Quick test button
+- Edit and delete actions
+- Docker version and stats
+
+## How to Use
+
+### Adding a Local Environment
+
+1. Click **Add environment** button
+2. **Basic Information**:
+   - Name: "Local Docker"
+   - Connection Type: Socket (default)
+3. **Socket Configuration**:
+   - Socket Path: `/var/run/docker.sock` (default)
+4. Click **Test** to verify connection
+5. Click **Add** to save
+
+**Prerequisites**:
+- Docker socket must be mounted in Dockhand container
+- Add to docker-compose.yml:
+  ```yaml
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+  ```
+
+### Adding a Remote Environment (TCP)
+
+1. Click **Add environment**
+2. **Basic Information**:
+   - Name: "Production Server"
+   - Connection Type: Direct
+3. **Quick URL** (optional):
+   - Paste full Docker URL: `https://192.168.1.100:2376`
+   - Click **Parse** to auto-fill fields
+4. **Or Configure Manually**:
+   - Host: `192.168.1.100` or `docker.example.com`
+   - Port: `2376` (TLS) or `2375` (plain)
+   - Protocol: HTTPS or HTTP
+5. **TLS Configuration** (if HTTPS):
+   - Paste CA certificate
+   - Paste client certificate
+   - Paste client key
+6. Click **Test** to verify
+7. Click **Add** to save
+
+**Remote Docker Setup**:
+```bash
+# On remote host, enable TCP with TLS
+sudo dockerd -H tcp://0.0.0.0:2376 --tlsverify \
+  --tlscacert=/etc/docker/ca.pem \
+  --tlscert=/etc/docker/server-cert.pem \
+  --tlskey=/etc/docker/server-key.pem
+
+# Or edit /etc/docker/daemon.json:
+{
+  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+  "tls": true,
+  "tlsverify": true,
+  "tlscacert": "/etc/docker/ca.pem",
+  "tlscert": "/etc/docker/server-cert.pem",
+  "tlskey": "/etc/docker/server-key.pem"
+}
+```
+
+### Adding a Hawser Environment
+
+1. Click **Add environment**
+2. **Basic Information**:
+   - Name: "Remote Site"
+   - Connection Type: Hawser Standard or Hawser Edge
+3. **Hawser Configuration**:
+   - Connection Type: Hawser Standard (agent connects to Dockhand)
+   - Or: Hawser Edge (Dockhand connects to agent)
+4. Click **Add** to save
+5. **Generate Token**:
+   - Navigate to Settings > Hawser
+   - Create token for this environment
+   - Copy token
+6. **Deploy Hawser Agent**:
+   - Install Hawser on remote Docker host
+   - Configure with Dockhand URL and token
+   - Start agent
+7. Agent connects automatically
+8. Environment shows "Connected" status
+
+**Hawser Agent Setup**:
+```bash
+# Docker run command
+docker run -d \
+  --name hawser \
+  --restart unless-stopped \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -e DOCKHAND_URL=https://dockhand.example.com \
+  -e HAWSER_TOKEN=your-token-here \
+  fnsys/hawser:latest
+
+# Or docker-compose.yml
+services:
+  hawser:
+    image: fnsys/hawser:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOCKHAND_URL: https://dockhand.example.com
+      HAWSER_TOKEN: your-token-here
+```
+
+### Switching Environments
+
+1. Click environment dropdown in top navigation
+2. Select target environment from list
+3. All pages refresh with new environment data
+4. Current environment shown in dropdown
+
+### Testing Connectivity
+
+1. Navigate to Environments page
+2. Find environment card
+3. Click **Test** button
+4. **Success** shows:
+   - Green indicator
+   - Docker version
+   - Container and image counts
+   - Host name
+5. **Failure** shows:
+   - Red indicator
+   - Error message
+   - Troubleshooting hints
+
+### Editing an Environment
+
+1. Click **Edit** icon on environment card
+2. Modify settings:
+   - Name
+   - Connection details
+   - TLS certificates (if applicable)
+3. Click **Test** to verify changes
+4. Click **Save** to update
+
+### Removing an Environment
+
+1. Click **Remove** icon on environment card
+2. Confirm deletion
+3. Environment removed from Dockhand
+4. **Note**: Does not affect Docker host itself
+
+## UI Walkthrough
+
+### Header Section
+
+- **Title**: "Environments" with count badge
+- **Add Environment Button**: Opens creation modal
+- **Refresh Button**: Reload environment list
+
+### Environment Cards
+
+**Card Layout**:
+- **Icon**: Globe icon with environment name
+- **Connection Info**:
+  - Socket: Shows socket path
+  - Direct: Shows protocol://host:port
+  - Hawser Edge: Shows "Edge connection (outbound)"
+  - Hawser Standard: Shows "Standard connection (inbound)"
+- **Status Indicator**:
+  - Testing: Spinner animation
+  - Connected: Green checkmark with "Connected"
+  - Failed: Red X with "Failed"
+- **Details** (on success):
+  - Host name
+  - Docker version
+  - Container count
+  - Image count
+- **Error Message** (on failure):
+  - Specific error text
+  - Troubleshooting hints
+
+**Action Buttons**:
+- **Test**: Verify connection
+- **Edit**: Modify configuration
+- **Remove**: Delete environment
+
+### Add/Edit Environment Modal
+
+**Sections**:
+1. **Quick URL Parser** (optional):
+   - Input field for full Docker URL
+   - Parse button to auto-fill fields
+   - Helpful for Direct connections
+
+2. **Basic Info**:
+   - Name (required)
+   - Connection Type (required)
+
+3. **Socket Configuration** (if Socket type):
+   - Socket path
+
+4. **Direct Configuration** (if Direct type):
+   - Host
+   - Port
+   - Protocol (HTTP/HTTPS dropdown)
+
+5. **TLS Certificates** (if HTTPS):
+   - CA certificate textarea
+   - Client certificate textarea
+   - Client key textarea
+
+6. **Hawser Configuration** (if Hawser type):
+   - Connection type info
+   - Token management link
+
+**Footer Buttons**:
+- **Cancel**: Close without saving
+- **Test**: Verify connection settings
+- **Add/Save**: Create or update environment
+
+## Real Examples
+
+### Example: Local Development
+
+```yaml
+Environment Configuration:
+Name: Local Docker
+Type: Socket
+Socket Path: /var/run/docker.sock
+
+Settings:
+  Public IP: (none)
+  Activity Collection: true
+  Metrics Collection: true
+  Highlight Changes: true
+  Labels: [dev, local]
+
+Use Case:
+  Developer workstation
+  Testing and development
+  No remote access needed
+```
+
+### Example: Production Server
+
+```yaml
+Environment Configuration:
+Name: Production
+Type: Direct (TCP/TLS)
+Host: prod-docker.company.com
+Port: 2376
+Protocol: HTTPS
+TLS Certificates: Configured
+
+Settings:
+  Public IP: 203.0.113.10
+  Activity Collection: true
+  Metrics Collection: true
+  Highlight Changes: false
+  Labels: [production, critical]
+
+Use Case:
+  Production workloads
+  Secure remote management
+  Public IP for port links
+```
+
+### Example: Remote Site with Hawser
+
+```yaml
+Environment Configuration:
+Name: Branch Office
+Type: Hawser Standard
+Agent ID: hawser-branch-001
+Agent Version: 1.2.0
+Last Seen: 2024-03-04 14:23:45
+
+Settings:
+  Public IP: 198.51.100.50
+  Activity Collection: true
+  Metrics Collection: true
+  Labels: [branch, hawser]
+
+Use Case:
+  Remote location behind NAT
+  No inbound firewall rules needed
+  Secure agent-based connection
+```
+
+### Example: Multi-Environment Setup
+
+```
+Dockhand Installation:
+- Local Docker (socket)
+- Development Server (TCP, http://192.168.1.10:2375)
+- Staging Server (TCP, https://staging.company.com:2376)
+- Production Server (TCP, https://prod.company.com:2376)
+- Remote Site 1 (Hawser Standard)
+- Remote Site 2 (Hawser Standard)
+- Remote Site 3 (Hawser Standard)
+
+Total: 7 environments
+Connection Types: 1 socket, 3 TCP, 3 Hawser
+Managed from single Dockhand instance
+```
+
+## Database Schema
+
+**environments** table:
+- `id`: Auto-incrementing primary key
+- `name`: Unique environment name
+- `host`: Hostname or IP address (for TCP)
+- `port`: Port number (for TCP)
+- `protocol`: http or https (for TCP)
+- `tlsCa`: CA certificate (for TLS)
+- `tlsCert`: Client certificate (for TLS)
+- `tlsKey`: Client key (for TLS)
+- `tlsSkipVerify`: Skip TLS verification (not recommended)
+- `connectionType`: socket, direct, hawser-standard, hawser-edge
+- `socketPath`: Unix socket path (for socket type)
+- `hawserToken`: Authentication token (for Hawser)
+- `hawserLastSeen`: Last agent connection timestamp
+- `hawserAgentId`: Agent identifier
+- `hawserAgentName`: Agent hostname
+- `hawserVersion`: Agent version
+- `hawserCapabilities`: Agent feature list
+- `publicIp`: Public IP for port links
+- `collectActivity`: Enable Docker event collection
+- `collectMetrics`: Enable host metrics collection
+- `highlightChanges`: Enable change highlighting
+- `labels`: JSON array of labels
+- `icon`: Icon identifier
+- `createdAt`: Creation timestamp
+- `updatedAt`: Last update timestamp
+
+**hawser_tokens** table:
+- `id`: Auto-incrementing primary key
+- `token`: Hashed token (secure storage)
+- `tokenPrefix`: First 8 chars for identification
+- `name`: Token name
+- `environmentId`: Foreign key to environments
+- `isActive`: Active status flag
+- `lastUsed`: Last usage timestamp
+- `createdAt`: Creation timestamp
+- `expiresAt`: Expiration timestamp (optional)
+
+## Technical Details
+
+### Connection Types
+
+**Socket**:
+- Uses Docker SDK with Unix socket
+- Path: `/var/run/docker.sock`
+- Requires socket mount in container
+- No authentication needed
+
+**Direct (TCP)**:
+- Uses Docker SDK with HTTP/HTTPS client
+- TLS verification with certificates
+- Mutual TLS authentication
+- Standard Docker Remote API
+
+**Hawser Standard**:
+- WebSocket-based communication
+- Agent polls Dockhand for commands
+- Long-polling with command queue
+- Response streaming for logs/exec
+
+**Hawser Edge**:
+- Similar to Hawser Standard
+- Direction reversed (Dockhand initiates)
+- Useful for restricted networks
+
+### Security Considerations
+
+**Socket**:
+- Full Docker access
+- Equivalent to root on host
+- Use read-only mount where possible
+
+**Direct TCP**:
+- Use TLS/HTTPS in production
+- Never use HTTP over public networks
+- Verify certificates
+- Rotate credentials regularly
+
+**Hawser**:
+- Token-based authentication
+- Tokens stored hashed in database
+- Set expiration dates
+- Revoke compromised tokens immediately
+
+### Performance
+
+**Connection Pooling**:
+- Docker clients cached per environment
+- Reused across API requests
+- Timeout after 30s idle
+
+**Health Checks**:
+- Periodic ping to verify connectivity
+- Automatic reconnection on failure
+- Status shown in UI
+
+### API Endpoints
+
+- `GET /api/environments` - List all environments
+- `POST /api/environments` - Create environment
+- `GET /api/environments/:id` - Get environment details
+- `PUT /api/environments/:id` - Update environment
+- `DELETE /api/environments/:id` - Remove environment
+- `POST /api/environments/:id/test` - Test connection

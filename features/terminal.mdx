@@ -1,0 +1,630 @@
+---
+title: 'Container Terminal'
+description: 'Execute commands and access interactive shell sessions directly in your browser with xterm.js integration'
+icon: 'terminal'
+---
+
+## Overview
+
+Dockhand provides browser-based terminal access to running containers using xterm.js and WebSocket connections. Execute commands, run interactive shells, and manage containers without SSH or local Docker CLI access.
+
+## Terminal Access
+
+### Creating an Exec Session
+
+Start a shell session in a container:
+
+```bash
+POST /api/containers/{id}/exec?envId={environmentId}
+```
+
+Request body:
+```json
+{
+  "shell": "/bin/bash",
+  "user": "root"
+}
+```
+
+Response:
+```json
+{
+  "execId": "abc123def456",
+  "connectionInfo": {
+    "type": "socket",
+    "host": "localhost",
+    "port": 2375
+  }
+}
+```
+
+### Implementation
+
+```typescript:src/routes/api/containers/[id]/exec/+server.ts
+import { createExec, getDockerConnectionInfo } from '$lib/server/docker';
+import { authorize } from '$lib/server/authorize';
+
+export const POST: RequestHandler = async ({ params, request, cookies, url }) => {
+  const auth = await authorize(cookies);
+  if (auth.authEnabled && !auth.isAuthenticated) {
+    return json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const containerId = params.id;
+  const envIdParam = url.searchParams.get('envId');
+  const envId = envIdParam ? parseInt(envIdParam, 10) : undefined;
+
+  // Permission check with environment context
+  if (!await auth.can('containers', 'exec', envId)) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+
+  try {
+    const body = await request.json().catch(() => ({}));
+    const shell = body.shell || '/bin/sh';
+    const user = body.user || 'root';
+
+    // Create exec instance
+    const exec = await createExec({
+      containerId,
+      cmd: [shell],
+      user,
+      envId
+    });
+
+    // Get connection info for the frontend
+    const connectionInfo = await getDockerConnectionInfo(envId);
+
+    return json({
+      execId: exec.Id,
+      connectionInfo: {
+        type: connectionInfo.type,
+        host: connectionInfo.host,
+        port: connectionInfo.port
+      }
+    });
+  } catch (error: any) {
+    console.error('Failed to create exec:', error);
+    return json(
+      { error: error.message || 'Failed to create exec instance' },
+      { status: 500 }
+    );
+  }
+};
+```
+
+## WebSocket Connection
+
+### Connecting to Terminal
+
+Once an exec session is created, connect via WebSocket:
+
+```typescript
+// Frontend WebSocket connection
+const ws = new WebSocket(
+  `ws://${connectionInfo.host}:${connectionInfo.port}/exec/${execId}/attach?stream=1&stdin=1&stdout=1&stderr=1`
+);
+
+ws.binaryType = 'arraybuffer';
+
+ws.onopen = () => {
+  console.log('Terminal connected');
+};
+
+ws.onmessage = (event) => {
+  // Docker multiplexes streams with 8-byte headers
+  const data = parseDockerStream(event.data);
+  terminal.write(data);
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('Terminal disconnected');
+};
+```
+
+### Docker Stream Format
+
+Docker multiplexes stdout/stderr using 8-byte headers:
+
+```
+Header = [8]byte{STREAM_TYPE, 0, 0, 0, SIZE1, SIZE2, SIZE3, SIZE4}
+
+STREAM_TYPE:
+  0: stdin
+  1: stdout  
+  2: stderr
+  3: systemerr
+
+SIZE1-4: uint32 (big-endian) payload size
+```
+
+Parser implementation:
+
+```typescript
+function parseDockerStream(buffer: ArrayBuffer): string {
+  const view = new DataView(buffer);
+  let output = '';
+  let offset = 0;
+
+  while (offset < buffer.byteLength) {
+    if (buffer.byteLength - offset < 8) break;
+
+    // Read header
+    const streamType = view.getUint8(offset);
+    const payloadSize = view.getUint32(offset + 4, false); // big-endian
+
+    offset += 8;
+
+    if (buffer.byteLength - offset < payloadSize) break;
+
+    // Read payload
+    const payloadBytes = new Uint8Array(buffer, offset, payloadSize);
+    const text = new TextDecoder().decode(payloadBytes);
+
+    // Color stderr output in red (optional)
+    if (streamType === 2) {
+      output += `\x1b[31m${text}\x1b[0m`;
+    } else {
+      output += text;
+    }
+
+    offset += payloadSize;
+  }
+
+  return output;
+}
+```
+
+## Terminal Emulator
+
+### xterm.js Integration
+
+The frontend uses xterm.js for terminal emulation:
+
+```typescript
+import { Terminal } from 'xterm';
+import { FitAddon } from 'xterm-addon-fit';
+import { WebLinksAddon } from 'xterm-addon-web-links';
+
+const terminal = new Terminal({
+  cursorBlink: true,
+  fontSize: 14,
+  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+  theme: {
+    background: '#1e1e1e',
+    foreground: '#d4d4d4',
+    cursor: '#ffffff',
+    selection: '#264f78',
+    black: '#000000',
+    red: '#cd3131',
+    green: '#0dbc79',
+    yellow: '#e5e510',
+    blue: '#2472c8',
+    magenta: '#bc3fbc',
+    cyan: '#11a8cd',
+    white: '#e5e5e5'
+  },
+  scrollback: 10000,
+  allowProposedApi: true
+});
+
+// Fit terminal to container
+const fitAddon = new FitAddon();
+terminal.loadAddon(fitAddon);
+
+// Enable clickable links
+const webLinksAddon = new WebLinksAddon();
+terminal.loadAddon(webLinksAddon);
+
+// Mount to DOM
+terminal.open(document.getElementById('terminal'));
+fitAddon.fit();
+
+// Handle user input
+terminal.onData((data) => {
+  ws.send(data);
+});
+
+// Auto-resize
+window.addEventListener('resize', () => {
+  fitAddon.fit();
+});
+```
+
+## Shell Selection
+
+### Detecting Available Shells
+
+Automatically detect which shell is available in the container:
+
+```typescript
+const SHELL_PRIORITY = [
+  '/bin/bash',
+  '/bin/zsh',
+  '/bin/sh',
+  '/bin/ash',
+  '/bin/dash'
+];
+
+async function detectShell(containerId: string): Promise<string> {
+  for (const shell of SHELL_PRIORITY) {
+    try {
+      const result = await execCommand(containerId, ['test', '-f', shell]);
+      if (result.exitCode === 0) {
+        return shell;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return '/bin/sh'; // Default fallback
+}
+```
+
+### Shell-Specific Features
+
+```typescript
+const SHELL_FEATURES = {
+  '/bin/bash': {
+    autocompletion: true,
+    history: true,
+    colorPrompt: true,
+    initCommand: 'export PS1="\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ "'
+  },
+  '/bin/zsh': {
+    autocompletion: true,
+    history: true,
+    colorPrompt: true,
+    initCommand: 'export PS1="%F{green}%n@%m%f:%F{blue}%~%f%# "'
+  },
+  '/bin/sh': {
+    autocompletion: false,
+    history: false,
+    colorPrompt: false,
+    initCommand: ''
+  }
+};
+```
+
+## User Selection
+
+### Running as Different Users
+
+Execute shell as any user in the container:
+
+```typescript
+// Root user (default)
+{
+  "user": "root"
+}
+
+// Application user
+{
+  "user": "node"
+}
+
+// Specific UID:GID
+{
+  "user": "1000:1000"
+}
+```
+
+### Permission Implications
+
+```bash
+# Root user - full access
+$ rm -rf /app/critical-file  # ✓ Allowed
+
+# Non-root user - limited access
+$ rm -rf /app/critical-file  # ✗ Permission denied
+```
+
+## Advanced Features
+
+### Command History
+
+Shells with history support maintain command history:
+
+```bash
+# Bash/Zsh history
+$ history
+$ !123          # Re-run command 123
+$ !!            # Re-run last command
+$ !$            # Last argument of previous command
+```
+
+### Tab Completion
+
+Bash and Zsh support tab completion:
+
+```bash
+$ cd /ap<TAB>      # Completes to /app/
+$ docker ps<TAB>   # Shows docker ps options
+```
+
+### Copy/Paste Support
+
+```typescript
+// Configure xterm.js copy/paste
+terminal.attachCustomKeyEventHandler((event) => {
+  // Ctrl+C: Copy (when text selected)
+  if (event.ctrlKey && event.key === 'c' && terminal.hasSelection()) {
+    document.execCommand('copy');
+    return false;
+  }
+  
+  // Ctrl+V: Paste
+  if (event.ctrlKey && event.key === 'v') {
+    navigator.clipboard.readText().then((text) => {
+      ws.send(text);
+    });
+    return false;
+  }
+  
+  return true;
+});
+```
+
+### Terminal Resize
+
+Dynamically resize terminal to match window:
+
+```typescript
+import { FitAddon } from 'xterm-addon-fit';
+
+const fitAddon = new FitAddon();
+terminal.loadAddon(fitAddon);
+
+// Fit on mount
+fitAddon.fit();
+
+// Fit on window resize
+const resizeObserver = new ResizeObserver(() => {
+  fitAddon.fit();
+  
+  // Notify Docker of new size
+  const { rows, cols } = terminal;
+  fetch(`/api/containers/${containerId}/exec/${execId}/resize`, {
+    method: 'POST',
+    body: JSON.stringify({ rows, cols })
+  });
+});
+
+resizeObserver.observe(terminalContainer);
+```
+
+## Multiple Terminals
+
+### Tabbed Interface
+
+Open multiple terminals to the same or different containers:
+
+```typescript
+interface TerminalTab {
+  id: string;
+  containerId: string;
+  containerName: string;
+  shell: string;
+  user: string;
+  terminal: Terminal;
+  ws: WebSocket;
+}
+
+const tabs: TerminalTab[] = [];
+
+function addTab(containerId: string, containerName: string) {
+  const tab = {
+    id: generateId(),
+    containerId,
+    containerName,
+    shell: '/bin/bash',
+    user: 'root',
+    terminal: new Terminal(),
+    ws: null
+  };
+  
+  tabs.push(tab);
+  connectTerminal(tab);
+}
+
+function closeTab(tabId: string) {
+  const tab = tabs.find(t => t.id === tabId);
+  if (tab) {
+    tab.ws?.close();
+    tab.terminal.dispose();
+    tabs.splice(tabs.indexOf(tab), 1);
+  }
+}
+```
+
+## Security Considerations
+
+### Authentication
+
+All terminal sessions require authentication:
+
+```typescript
+if (auth.authEnabled && !auth.isAuthenticated) {
+  return json({ error: 'Unauthorized' }, { status: 401 });
+}
+```
+
+### Authorization
+
+Users need `containers:exec` permission:
+
+```typescript
+if (!await auth.can('containers', 'exec', envId)) {
+  return json({ error: 'Permission denied' }, { status: 403 });
+}
+```
+
+### Audit Logging
+
+All exec sessions are logged:
+
+```typescript
+await auditLog({
+  action: 'container_exec',
+  entityType: 'container',
+  entityId: containerId,
+  entityName: containerName,
+  userId: auth.userId,
+  details: {
+    shell,
+    user,
+    timestamp: new Date().toISOString()
+  }
+});
+```
+
+### Session Timeout
+
+Terminal sessions timeout after inactivity:
+
+```typescript
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+let lastActivity = Date.now();
+
+ws.onmessage = (event) => {
+  lastActivity = Date.now();
+  handleMessage(event);
+};
+
+const timeoutCheck = setInterval(() => {
+  if (Date.now() - lastActivity > SESSION_TIMEOUT) {
+    console.log('Session timeout');
+    ws.close();
+    clearInterval(timeoutCheck);
+  }
+}, 60000); // Check every minute
+```
+
+## Best Practices
+
+### Terminal Usage
+
+1. **Close sessions** when done to free resources
+2. **Use appropriate user** - avoid root when possible
+3. **Don't run long tasks** - use scheduled jobs instead
+4. **Monitor resource usage** - terminals consume memory
+5. **Audit sensitive operations** - track who did what
+
+### Shell Selection
+
+1. **Try bash first** - most feature-rich
+2. **Fall back to sh** - guaranteed to exist
+3. **Test shell availability** before creating exec
+4. **Match container's default** - respect Dockerfile USER
+
+### Performance
+
+1. **Limit scrollback** - reduce memory usage
+2. **Close inactive terminals** - free connections
+3. **Use connection pooling** - reuse WebSocket connections
+4. **Throttle output** - prevent browser overload
+
+```typescript
+// Throttle terminal output
+let outputBuffer = '';
+let throttleTimeout: number | null = null;
+
+ws.onmessage = (event) => {
+  outputBuffer += parseDockerStream(event.data);
+  
+  if (!throttleTimeout) {
+    throttleTimeout = setTimeout(() => {
+      terminal.write(outputBuffer);
+      outputBuffer = '';
+      throttleTimeout = null;
+    }, 16); // ~60fps
+  }
+};
+```
+
+## Troubleshooting
+
+### Connection Failed
+
+```
+Error: Failed to connect to WebSocket
+```
+
+**Solutions**:
+1. Check container is running
+2. Verify Docker daemon is accessible
+3. Check firewall rules
+4. Ensure WebSocket proxy is configured correctly
+
+### Shell Not Found
+
+```
+Error: exec: "/bin/bash": stat /bin/bash: no such file or directory
+```
+
+**Solution**: Try different shell (`/bin/sh`, `/bin/ash`)
+
+### Permission Denied
+
+```
+Error: OCI runtime exec failed: exec failed: unable to start container process: exec: "/bin/bash": permission denied
+```
+
+**Solutions**:
+1. Check container security settings
+2. Try running as root user
+3. Verify container is not in restricted mode
+
+### Terminal Not Rendering
+
+```
+Terminal appears blank or garbled
+```
+
+**Solutions**:
+1. Resize terminal window
+2. Send newline character to trigger refresh
+3. Check xterm.js theme configuration
+4. Clear terminal and reconnect
+
+## Limitations
+
+### Container Requirements
+
+- Container must be **running**
+- Shell must be present in container
+- Container must allow exec (no `--no-new-privileges` flag)
+
+### Browser Limitations
+
+- Requires WebSocket support
+- May have issues with mobile browsers
+- Limited clipboard integration
+- No true terminal emulation (only ANSI escape codes)
+
+### Docker API Limitations
+
+- No TTY resizing after creation (must recreate exec)
+- Limited signal support
+- No job control (background processes)
+
+## API Reference
+
+```bash
+# Create exec session
+POST /api/containers/{id}/exec?envId={environmentId}
+
+# Attach to exec (WebSocket)
+WS /exec/{execId}/attach?stream=1&stdin=1&stdout=1&stderr=1
+
+# Resize terminal
+POST /api/containers/{id}/exec/{execId}/resize
+
+# Inspect exec
+GET /api/containers/{id}/exec/{execId}
+```

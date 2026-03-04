@@ -1,97 +1,349 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Dockhand Documentation"
+description: "Modern Docker management you will like"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#122d48] via-[#405064] to-[#122d48] dark:from-[#0a1825] dark:via-[#122d48] dark:to-[#0a1825] py-20">
+  <div className="max-w-7xl mx-auto px-6 lg:px-8">
+    <div className="lg:grid lg:grid-cols-12 lg:gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Docker Management You Will Like
+        </h1>
+        <p className="text-lg sm:text-xl text-gray-200 dark:text-gray-300 mb-8 max-w-2xl">
+          Modern, efficient Docker management with real-time container orchestration, Compose stack deployments, and multi-environment support. All in a lightweight, secure, and privacy-focused package.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#405064] font-semibold hover:bg-gray-100 transition-colors"
+          >
+            Get Started
+          </a>
+          <a
+            href="/features"
+            className="inline-flex items-center px-6 py-3 rounded-lg border border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors backdrop-blur-sm"
+          >
+            Explore Features
+          </a>
+          <a
+            href="/api/overview"
+            className="inline-flex items-center px-6 py-3 rounded-lg border border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors backdrop-blur-sm"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="hidden lg:block lg:col-span-5">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#405064]/20 to-transparent rounded-2xl blur-3xl"></div>
+          <img
+            src="https://media.brand.dev/176bba0f-dea0-4684-bb74-b200be3afa13.webp"
+            alt="Dockhand Logo"
+            noZoom
+            className="relative w-full h-auto max-w-md mx-auto"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">Quick Start</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Get Dockhand up and running in minutes</p>
+  
+  <Steps>
+    <Step title="Deploy with Docker">
+      Pull and run the Dockhand container with access to your Docker socket:
+      
+      ```bash Docker Run
+      docker run -d \
+        --name dockhand \
+        -p 3000:3000 \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v dockhand_data:/app/data \
+        --restart unless-stopped \
+        fnsys/dockhand:latest
+      ```
+      
+      <Note>
+        The Docker socket mount (`/var/run/docker.sock`) gives Dockhand access to manage containers on your host.
+      </Note>
+    </Step>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+    <Step title="Access the Web UI">
+      Open your browser and navigate to `http://localhost:3000`. You'll be greeted with the Dockhand dashboard showing your running containers, images, and system metrics.
+      
+      <Info>
+        First-time setup will guide you through creating an admin account and configuring authentication options.
+      </Info>
+    </Step>
 
-## Make it yours
+    <Step title="Connect to Remote Hosts">
+      Add remote Docker environments from the **Environments** page. Dockhand supports:
+      - Direct TCP connections with TLS
+      - SSH tunnels for secure remote access
+      - Hawser agent for edge deployments
+      
+      <Tip>
+        Use the built-in environment health monitoring to track connection status and system metrics across all your Docker hosts.
+      </Tip>
+    </Step>
 
-Design a docs site that looks great and empowers your users.
+    <Step title="Deploy Your First Stack">
+      Navigate to **Stacks** and deploy a Docker Compose stack:
+      - Paste your `docker-compose.yml` content
+      - Pull from a Git repository with auto-sync
+      - Use the visual editor to configure services
+      
+      ```yaml Example Stack
+      version: '3.8'
+      services:
+        nginx:
+          image: nginx:alpine
+          ports:
+            - "80:80"
+          restart: unless-stopped
+      ```
+    </Step>
+  </Steps>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">Core Features</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Everything you need to manage Docker at scale</p>
+  
+  <CardGroup cols={3}>
     <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      title="Container Management"
+      icon="box"
+      href="/features/containers"
+    >
+      Start, stop, restart, and monitor containers in real-time with live logs and metrics.
+    </Card>
+    <Card
+      title="Compose Stacks"
+      icon="layer-group"
+      href="/features/stacks"
+    >
+      Visual editor for Docker Compose with Git integration and auto-sync capabilities.
+    </Card>
+    <Card
+      title="Multi-Environment"
+      icon="globe"
+      href="/features/environments"
+    >
+      Manage local and remote Docker hosts from a single interface with health monitoring.
+    </Card>
+    <Card
+      title="Image Management"
+      icon="compact-disc"
+      href="/features/images"
+    >
+      Pull, push, scan for vulnerabilities, and manage images across registries.
+    </Card>
+    <Card
+      title="Network & Volumes"
+      icon="network-wired"
+      href="/features/networks"
+    >
+      Create and manage Docker networks and persistent volumes with visual topology.
+    </Card>
+    <Card
+      title="Scheduling & Automation"
+      icon="clock"
+      href="/features/scheduling"
+    >
+      Schedule container actions, automated updates, and cron-based operations.
+    </Card>
+  </CardGroup>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">Advanced Capabilities</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Enterprise-grade features for production deployments</p>
+  
+  <CardGroup cols={2}>
+    <Card
+      title="Authentication & SSO"
+      icon="shield-halved"
+      href="/auth/overview"
+    >
+      Local users, OIDC, LDAP, 2FA, and role-based access control for enterprise security.
+    </Card>
+    <Card
+      title="Git Integration"
+      icon="code-branch"
+      href="/features/git-integration"
+    >
+      Deploy stacks from Git with webhooks, auto-sync, and credential management.
+    </Card>
+    <Card
+      title="Real-time Monitoring"
+      icon="chart-line"
+      href="/features/monitoring"
+    >
+      Live metrics, activity dashboards, and health tracking for all environments.
+    </Card>
+    <Card
+      title="Notifications"
+      icon="bell"
+      href="/features/notifications"
+    >
+      Email and webhook alerts for container events, health changes, and system updates.
+    </Card>
+    <Card
+      title="Interactive Terminal"
+      icon="terminal"
+      href="/features/terminal"
+    >
+      Web-based shell access to containers with full terminal emulation.
+    </Card>
+    <Card
+      title="File Browser"
+      icon="folder-open"
+      href="/features/file-browser"
+    >
+      Browse, upload, and download files from running containers.
+    </Card>
+  </CardGroup>
+</div>
 
-Everything you need to create world-class documentation.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">Explore by Topic</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Jump into detailed guides and references</p>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a
+      href="/installation"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#405064] dark:hover:border-[#405064] overflow-hidden no-underline transition-colors bg-white dark:bg-[#1a1d27]"
+    >
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          <span>Installation & Setup</span>
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Deploy with Docker, Docker Compose, or Kubernetes. Configure databases, TLS, and environment variables.
+        </p>
+        <span className="text-sm font-medium text-[#405064] group-hover:text-[#122d48] dark:text-[#c0c4c9] dark:group-hover:text-white transition-colors inline-flex items-center gap-1">
+          Learn more
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </span>
+      </div>
+    </a>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+    <a
+      href="/api/overview"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#405064] dark:hover:border-[#405064] overflow-hidden no-underline transition-colors bg-white dark:bg-[#1a1d27]"
+    >
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          <span>API Reference</span>
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Complete REST API documentation for containers, stacks, images, networks, and automation.
+        </p>
+        <span className="text-sm font-medium text-[#405064] group-hover:text-[#122d48] dark:text-[#c0c4c9] dark:group-hover:text-white transition-colors inline-flex items-center gap-1">
+          View API docs
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </span>
+      </div>
+    </a>
 
-## Need inspiration?
+    <a
+      href="/auth/overview"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#405064] dark:hover:border-[#405064] overflow-hidden no-underline transition-colors bg-white dark:bg-[#1a1d27]"
+    >
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          <span>Authentication & Security</span>
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Configure SSO with OIDC, LDAP integration, two-factor authentication, and role-based access control.
+        </p>
+        <span className="text-sm font-medium text-[#405064] group-hover:text-[#122d48] dark:text-[#c0c4c9] dark:group-hover:text-white transition-colors inline-flex items-center gap-1">
+          Security docs
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </span>
+      </div>
+    </a>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    <a
+      href="/integrations/remote-hosts"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#405064] dark:hover:border-[#405064] overflow-hidden no-underline transition-colors bg-white dark:bg-[#1a1d27]"
+    >
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          <span>Integrations</span>
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Connect to remote Docker hosts, private registries, Git repositories, and webhook endpoints.
+        </p>
+        <span className="text-sm font-medium text-[#405064] group-hover:text-[#122d48] dark:text-[#c0c4c9] dark:group-hover:text-white transition-colors inline-flex items-center gap-1">
+          Integration guides
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </span>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">Resources</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Get help and connect with the community</p>
+  
+  <CardGroup cols={3}>
+    <Card
+      title="Troubleshooting"
+      icon="wrench"
+      href="/troubleshooting"
+    >
+      Common issues, error messages, and solutions for deployment and configuration problems.
+    </Card>
+    <Card
+      title="FAQ"
+      icon="circle-question"
+      href="/faq"
+    >
+      Frequently asked questions about features, licensing, and deployment options.
+    </Card>
+    <Card
+      title="Contributing"
+      icon="code-pull-request"
+      href="/contributing"
+    >
+      Learn how to contribute to Dockhand development and join the community.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#405064] to-[#122d48] dark:from-[#122d48] dark:to-[#0a1825] p-10 border border-[#405064]/20">
+    <div className="relative z-10 max-w-2xl">
+      <h2 className="text-3xl font-bold text-white mb-4">
+        Ready to Get Started?
+      </h2>
+      <p className="text-lg text-gray-200 dark:text-gray-300 mb-6">
+        Deploy Dockhand in minutes and start managing your Docker infrastructure with a modern, intuitive interface.
+      </p>
+      <a
+        href="/quickstart"
+        className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#405064] font-semibold hover:bg-gray-100 transition-colors"
+      >
+        Start Now
+      </a>
+    </div>
+    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/5 rounded-full blur-3xl"></div>
+    <div className="absolute bottom-0 right-20 -mb-10 w-48 h-48 bg-[#c0c4c9]/10 rounded-full blur-2xl"></div>
+  </div>
+</div>

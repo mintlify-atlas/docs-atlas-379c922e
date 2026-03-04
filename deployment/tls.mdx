@@ -1,0 +1,434 @@
+---
+title: TLS Configuration
+description: Configure TLS/HTTPS for Docker connections
+icon: lock
+---
+
+## Overview
+
+Dockhand supports TLS (Transport Layer Security) for secure connections to remote Docker daemons. This is essential when managing Docker hosts over the network.
+
+<Note>
+  TLS configuration is per-environment. Each Docker environment can have its own TLS certificates.
+</Note>
+
+## When to Use TLS
+
+Use TLS when connecting to Docker over TCP:
+
+- **Remote Docker hosts** - Docker daemon on different server
+- **Docker over network** - Non-local socket connections
+- **Production deployments** - Secure communication required
+- **Internet-exposed Docker API** - Public Docker endpoints
+
+**Don't need TLS for**:
+- Local Unix socket (`/var/run/docker.sock`)
+- Docker Desktop
+- Same-host containers
+
+## Environment Configuration
+
+Configure TLS per-environment in the Dockhand UI:
+
+1. Go to **Settings > Environments**
+2. Create or edit an environment
+3. Set **Connection Type** to "Direct (TCP)"
+4. Set **Protocol** to `https`
+5. Enter **Host** and **Port** (default: 2376)
+6. Provide TLS certificates:
+   - **CA Certificate** (ca.pem)
+   - **Client Certificate** (cert.pem)
+   - **Client Key** (key.pem)
+7. Optionally enable **Skip Verify** (not recommended)
+
+### Environment Schema
+
+From `schema/index.ts:23-32`:
+
+```typescript
+export const environments = sqliteTable('environments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+  host: text('host'),
+  port: integer('port').default(2375),
+  protocol: text('protocol').default('http'),
+  tlsCa: text('tls_ca'),           // CA certificate (PEM)
+  tlsCert: text('tls_cert'),       // Client certificate (PEM)
+  tlsKey: text('tls_key'),         // Client private key (PEM - encrypted)
+  tlsSkipVerify: integer('tls_skip_verify', { mode: 'boolean' }).default(false),
+  // ...
+});
+```
+
+## Certificate Requirements
+
+### CA Certificate (ca.pem)
+
+Root certificate authority that signed the server's certificate.
+
+```
+-----BEGIN CERTIFICATE-----
+MIIDXTCCAkWgAwIBAgIJAKl...
+...
+-----END CERTIFICATE-----
+```
+
+### Client Certificate (cert.pem)
+
+Client authentication certificate.
+
+```
+-----BEGIN CERTIFICATE-----
+MIIDXTCCAkWgAwIBAgIJAKl...
+...
+-----END CERTIFICATE-----
+```
+
+### Client Key (key.pem)
+
+Private key for client certificate.
+
+```
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAr8zSLI...
+...
+-----END RSA PRIVATE KEY-----
+```
+
+<Warning>
+  The client private key is **encrypted** and stored securely in the database. Never share your private keys.
+</Warning>
+
+## Generating TLS Certificates
+
+### Using Docker's Script
+
+Docker provides a script to generate TLS certificates:
+
+```bash
+# Clone Docker's cert generation script
+curl -fsSL https://raw.githubusercontent.com/docker/docker/master/contrib/dind/generate-tls.sh -o generate-tls.sh
+chmod +x generate-tls.sh
+
+# Generate certificates
+./generate-tls.sh
+```
+
+Generates:
+- `ca.pem` - CA certificate
+- `cert.pem` - Client certificate  
+- `key.pem` - Client private key
+- `server-cert.pem` - Server certificate
+- `server-key.pem` - Server private key
+
+### Using OpenSSL
+
+Manual certificate generation:
+
+```bash
+# 1. Generate CA
+openssl genrsa -aes256 -out ca-key.pem 4096
+openssl req -new -x509 -days 365 -key ca-key.pem -sha256 -out ca.pem
+
+# 2. Generate server key and certificate
+openssl genrsa -out server-key.pem 4096
+openssl req -subj "/CN=docker-host" -sha256 -new -key server-key.pem -out server.csr
+
+# Add SANs
+echo "subjectAltName = DNS:docker-host,IP:192.168.1.100,IP:127.0.0.1" >> extfile.cnf
+echo "extendedKeyUsage = serverAuth" >> extfile.cnf
+
+openssl x509 -req -days 365 -sha256 -in server.csr -CA ca.pem -CAkey ca-key.pem \
+  -CAcreateserial -out server-cert.pem -extfile extfile.cnf
+
+# 3. Generate client key and certificate
+openssl genrsa -out key.pem 4096
+openssl req -subj '/CN=client' -new -key key.pem -out client.csr
+
+echo "extendedKeyUsage = clientAuth" > extfile-client.cnf
+
+openssl x509 -req -days 365 -sha256 -in client.csr -CA ca.pem -CAkey ca-key.pem \
+  -CAcreateserial -out cert.pem -extfile extfile-client.cnf
+
+# 4. Set permissions
+chmod 0400 ca-key.pem key.pem server-key.pem
+chmod 0444 ca.pem server-cert.pem cert.pem
+```
+
+## Configuring Docker Daemon
+
+Enable TLS on the Docker daemon:
+
+### Using daemon.json
+
+```json /etc/docker/daemon.json
+{
+  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+  "tls": true,
+  "tlsverify": true,
+  "tlscacert": "/etc/docker/certs/ca.pem",
+  "tlscert": "/etc/docker/certs/server-cert.pem",
+  "tlskey": "/etc/docker/certs/server-key.pem"
+}
+```
+
+### Using systemd
+
+Edit Docker service:
+
+```bash
+sudo systemctl edit docker.service
+```
+
+Add:
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/bin/dockerd \
+  --tlsverify \
+  --tlscacert=/etc/docker/certs/ca.pem \
+  --tlscert=/etc/docker/certs/server-cert.pem \
+  --tlskey=/etc/docker/certs/server-key.pem \
+  -H=unix:///var/run/docker.sock \
+  -H=tcp://0.0.0.0:2376
+```
+
+Reload and restart:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+## Stack Deployment with TLS
+
+When deploying Docker Compose stacks to TLS-enabled environments, Dockhand:
+
+1. Creates temporary directory for certificates
+2. Writes PEM files: `ca.pem`, `cert.pem`, `key.pem`
+3. Sets environment variables:
+   - `DOCKER_TLS=1`
+   - `DOCKER_CERT_PATH=/path/to/certs`
+   - `DOCKER_TLS_VERIFY=1` (or `0` if skip verify)
+4. Runs `docker compose` command
+5. Cleans up temporary certificates
+
+From `stacks.ts:1026-1059`:
+
+```typescript
+// Handle TLS certificates for remote Docker connections
+let tlsCertDir: string | undefined;
+if (tlsConfig) {
+  // Create temp directory for TLS certs in DATA_DIR
+  const dataDir = resolve(process.env.DATA_DIR || './data');
+  tlsCertDir = join(dataDir, 'tmp', `tls-${stackName}-${Date.now()}`);
+  mkdirSync(tlsCertDir, { recursive: true });
+
+  // Track for cleanup
+  activeTlsDirs.add(tlsCertDir);
+
+  // Write certificate files
+  const { ca, cert, key } = tlsConfig;
+  if (ca) {
+    const cleanedCa = cleanPem(ca);
+    if (cleanedCa) writeFileSync(join(tlsCertDir, 'ca.pem'), cleanedCa);
+  }
+  if (cert) {
+    const cleanedCert = cleanPem(cert);
+    if (cleanedCert) writeFileSync(join(tlsCertDir, 'cert.pem'), cleanedCert);
+  }
+  if (key) {
+    const cleanedKey = cleanPem(key);
+    if (cleanedKey) writeFileSync(join(tlsCertDir, 'key.pem'), cleanedKey);
+  }
+
+  // Set Docker TLS environment variables
+  spawnEnv.DOCKER_TLS = '1';
+  spawnEnv.DOCKER_CERT_PATH = tlsCertDir;
+  spawnEnv.DOCKER_TLS_VERIFY = tlsConfig.skipVerify ? '0' : '1';
+}
+```
+
+## Skip TLS Verification
+
+You can disable certificate verification:
+
+```yaml
+environments:
+  - name: "Dev Docker"
+    protocol: https
+    tlsSkipVerify: true
+```
+
+Sets `DOCKER_TLS_VERIFY=0`.
+
+<Warning>
+  **Not recommended for production.** Skip verify disables certificate validation, allowing man-in-the-middle attacks.
+</Warning>
+
+Use only for:
+- Self-signed certificates in development
+- Testing TLS configuration
+- Internal networks with trusted certificates
+
+## Certificate Encryption
+
+Dockhand encrypts sensitive TLS data before storing in database:
+
+- **TLS Private Key** (`tlsKey`) - Always encrypted
+- **TLS Certificate** (`tlsCert`) - Stored as plain text (public data)
+- **CA Certificate** (`tlsCa`) - Stored as plain text (public data)
+
+From `encryption.ts:362-363` and `505-506`:
+
+```typescript
+// Check if tlsKey is encrypted
+if (env.tlsKey && isEncrypted(env.tlsKey)) {
+  allEncrypted.push({ table: 'environments', id: env.id, field: 'tlsKey', value: env.tlsKey });
+}
+
+// Encrypt tlsKey if not encrypted
+if (env.tlsKey && !isEncrypted(env.tlsKey)) {
+  updates.tlsKey = encrypt(env.tlsKey);
+}
+```
+
+Encryption key: See [Environment Variables - ENCRYPTION_KEY](/deployment/environment-variables#encryption-key)
+
+## Testing TLS Connection
+
+Test TLS connection from command line:
+
+```bash
+# Using curl
+curl --cacert ca.pem --cert cert.pem --key key.pem https://docker-host:2376/version
+
+# Using Docker CLI
+export DOCKER_HOST=tcp://docker-host:2376
+export DOCKER_TLS_VERIFY=1
+export DOCKER_CERT_PATH=/path/to/certs
+docker version
+docker ps
+```
+
+Test in Dockhand:
+
+1. Add environment with TLS configuration
+2. Click **Test Connection**
+3. Check for success or error messages
+
+## Troubleshooting
+
+### Certificate Verification Failed
+
+**Error**: `unable to verify the first certificate`
+
+**Solutions**:
+- Ensure CA certificate matches server certificate's CA
+- Verify certificate chain is complete
+- Check certificate hasn't expired: `openssl x509 -in cert.pem -noout -dates`
+
+### Invalid Certificate
+
+**Error**: `certificate is valid for X, not Y`
+
+**Solution**:
+- Regenerate server certificate with correct hostname/IP in SANs
+- Add `DNS:hostname` and `IP:x.x.x.x` to certificate's Subject Alternative Names
+
+### Connection Refused
+
+**Error**: `connect ECONNREFUSED`
+
+**Solutions**:
+- Check Docker daemon is listening on TCP: `netstat -tlnp | grep 2376`
+- Verify firewall allows port 2376
+- Test with telnet: `telnet docker-host 2376`
+
+### Wrong Protocol
+
+**Error**: `write EPROTO`
+
+**Solutions**:
+- Ensure protocol is set to `https` (not `http`)
+- Check Docker daemon has TLS enabled
+- Verify port 2376 (TLS) not 2375 (unencrypted)
+
+### PEM Format Error
+
+**Error**: `error:0909006C:PEM routines`
+
+**Solutions**:
+- Verify PEM files have correct headers/footers:
+  ```
+  -----BEGIN CERTIFICATE-----
+  ...
+  -----END CERTIFICATE-----
+  ```
+- Check no extra whitespace or newlines
+- Ensure proper Base64 encoding
+
+Dockhand includes PEM cleaning utility (`utils/pem.ts:3`):
+```typescript
+/**
+ * TLS implementations are strict about PEM format - they fail when certificates have
+ * extra whitespace, CRLF line endings, or missing newlines
+ */
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Strong Keys" icon="key">
+    Use 4096-bit RSA keys for better security.
+  </Card>
+  
+  <Card title="Certificate Expiry" icon="calendar">
+    Set expiry dates and rotate certificates before expiration.
+  </Card>
+  
+  <Card title="Verify Enabled" icon="shield-check">
+    Always enable verification in production (don't skip verify).
+  </Card>
+  
+  <Card title="Firewall Rules" icon="fire">
+    Restrict port 2376 to trusted IPs only.
+  </Card>
+</CardGroup>
+
+## Security Considerations
+
+### Protect Private Keys
+
+- Never commit private keys to Git
+- Use `.gitignore` for `*.pem`, `*.key` files
+- Restrict file permissions: `chmod 400 key.pem`
+- Rotate keys periodically
+
+### Network Security
+
+- Use firewall to limit access to port 2376
+- Consider VPN for Docker access over internet
+- Use Docker contexts for multiple environments
+
+### Dockhand Storage
+
+- Private keys are encrypted in database
+- Back up `ENCRYPTION_KEY` securely
+- Use PostgreSQL with SSL for database connection
+- Enable authentication in Dockhand (LDAP/OIDC)
+
+## Docker Context Alternative
+
+Docker contexts provide an alternative to TLS configuration:
+
+```bash
+# Create context
+docker context create remote-docker \
+  --docker "host=tcp://docker-host:2376,ca=/path/to/ca.pem,cert=/path/to/cert.pem,key=/path/to/key.pem"
+
+# Use context
+docker context use remote-docker
+docker ps
+```
+
+Dockhand doesn't use Docker contexts directly but uses the same TLS certificate files.

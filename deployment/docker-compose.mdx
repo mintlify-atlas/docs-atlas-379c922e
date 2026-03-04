@@ -1,0 +1,453 @@
+---
+title: Docker Compose Deployment
+description: Deploy Dockhand with Docker Compose
+icon: layer-group
+---
+
+## Quick Start
+
+Create a `docker-compose.yaml` file:
+
+```yaml docker-compose.yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dockhand
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+
+volumes:
+  dockhand_data:
+```
+
+Start Dockhand:
+
+```bash
+docker compose up -d
+```
+
+Access at `http://localhost:3000`
+
+## Configuration Options
+
+### Custom Port
+
+Change the exposed port:
+
+```yaml
+services:
+  dockhand:
+    # ...
+    ports:
+      - 8080:3000  # Access at http://localhost:8080
+```
+
+### Environment Variables
+
+Add environment variables:
+
+```yaml
+services:
+  dockhand:
+    # ...
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - DATA_DIR=/app/data
+```
+
+See [Environment Variables](/deployment/environment-variables) for all options.
+
+### Environment File
+
+Use a `.env` file for sensitive data:
+
+```bash .env
+ENCRYPTION_KEY=your-secret-key-here
+DATABASE_URL=postgres://user:pass@postgres:5432/dockhand
+```
+
+```yaml docker-compose.yaml
+services:
+  dockhand:
+    # ...
+    env_file:
+      - .env
+```
+
+<Warning>
+  Add `.env` to your `.gitignore` to prevent committing secrets.
+</Warning>
+
+### Bind Mounts
+
+Use bind mounts instead of named volumes:
+
+```yaml
+services:
+  dockhand:
+    # ...
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data  # Bind mount to local directory
+```
+
+Create the directory first:
+```bash
+mkdir -p ./data
+chown -R 1001:1001 ./data
+```
+
+### User and Group
+
+Run as specific user:
+
+```yaml
+services:
+  dockhand:
+    # ...
+    user: "1000:1000"
+    group_add:
+      - "999"  # Docker socket group ID
+```
+
+Or use environment variables:
+
+```yaml
+services:
+  dockhand:
+    # ...
+    environment:
+      - PUID=1000
+      - PGID=1000
+```
+
+### Resource Limits
+
+Set CPU and memory limits:
+
+```yaml
+services:
+  dockhand:
+    # ...
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+```
+
+## PostgreSQL Database
+
+For production, use PostgreSQL instead of SQLite:
+
+```yaml docker-compose-postgresql.yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dockhand
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: dockhand
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  dockhand:
+    image: fnsys/dockhand:latest
+    ports:
+      - 3000:3000
+    environment:
+      DATABASE_URL: postgres://dockhand:changeme@postgres:5432/dockhand
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  dockhand_data:
+```
+
+<Tip>
+  Use `depends_on` to ensure PostgreSQL starts before Dockhand.
+</Tip>
+
+See [Database Configuration](/deployment/database) for more details.
+
+## Reverse Proxy
+
+### Traefik
+
+Deploy with Traefik labels:
+
+```yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dockhand
+    restart: unless-stopped
+    networks:
+      - traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dockhand.rule=Host(`dockhand.example.com`)"
+      - "traefik.http.routers.dockhand.entrypoints=websecure"
+      - "traefik.http.routers.dockhand.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dockhand.loadbalancer.server.port=3000"
+
+volumes:
+  dockhand_data:
+
+networks:
+  traefik:
+    external: true
+```
+
+### Nginx Proxy Manager
+
+Deploy on custom network:
+
+```yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dockhand
+    restart: unless-stopped
+    networks:
+      - proxy
+    expose:
+      - 3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+
+volumes:
+  dockhand_data:
+
+networks:
+  proxy:
+    external: true
+```
+
+Configure proxy host in Nginx Proxy Manager:
+- **Domain**: `dockhand.example.com`
+- **Forward Hostname**: `dockhand`
+- **Forward Port**: `3000`
+- **Websockets Support**: Enabled
+
+### Caddy
+
+Deploy with Caddy labels:
+
+```yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dockhand
+    restart: unless-stopped
+    networks:
+      - caddy
+    expose:
+      - 3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    labels:
+      caddy: dockhand.example.com
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+
+volumes:
+  dockhand_data:
+
+networks:
+  caddy:
+    external: true
+```
+
+## Management Commands
+
+### Start Services
+
+```bash
+docker compose up -d
+```
+
+### Stop Services
+
+```bash
+docker compose down
+```
+
+### View Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f dockhand
+
+# Last 100 lines
+docker compose logs --tail 100 dockhand
+```
+
+### Restart Services
+
+```bash
+# All services
+docker compose restart
+
+# Specific service
+docker compose restart dockhand
+```
+
+### Update Image
+
+```bash
+# Pull latest image
+docker compose pull
+
+# Recreate containers
+docker compose up -d
+```
+
+### Remove Everything
+
+```bash
+# Stop and remove containers, networks
+docker compose down
+
+# Remove volumes too (DELETES DATA)
+docker compose down -v
+```
+
+## Multi-Environment Setup
+
+Run multiple Dockhand instances:
+
+```yaml docker-compose.yaml
+services:
+  dockhand-prod:
+    image: fnsys/dockhand:latest
+    container_name: dockhand-prod
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_prod_data:/app/data
+    environment:
+      - ENCRYPTION_KEY=${PROD_ENCRYPTION_KEY}
+
+  dockhand-staging:
+    image: fnsys/dockhand:latest
+    container_name: dockhand-staging
+    restart: unless-stopped
+    ports:
+      - 3001:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_staging_data:/app/data
+    environment:
+      - ENCRYPTION_KEY=${STAGING_ENCRYPTION_KEY}
+
+volumes:
+  dockhand_prod_data:
+  dockhand_staging_data:
+```
+
+## Health Checks
+
+Add health checks:
+
+```yaml
+services:
+  dockhand:
+    # ...
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+## Backup
+
+Backup data volumes:
+
+```bash
+# Backup
+docker run --rm \
+  -v dockhand_data:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/dockhand-backup-$(date +%Y%m%d).tar.gz -C /data .
+
+# Restore
+docker run --rm \
+  -v dockhand_data:/data \
+  -v $(pwd):/backup \
+  alpine sh -c "cd /data && tar xzf /backup/dockhand-backup-20240101.tar.gz"
+```
+
+## Troubleshooting
+
+### Service Won't Start
+
+Check logs:
+```bash
+docker compose logs dockhand
+```
+
+Validate compose file:
+```bash
+docker compose config
+```
+
+### Port Already in Use
+
+Find what's using the port:
+```bash
+sudo lsof -i :3000
+```
+
+Change port in compose file:
+```yaml
+ports:
+  - 3001:3000  # Use different host port
+```
+
+### Permission Issues
+
+Fix data directory permissions:
+```bash
+sudo chown -R 1001:1001 ./data
+```
+
+Or run as root:
+```yaml
+environment:
+  - PUID=0
+  - PGID=0
+```
+
+### Network Errors
+
+Recreate networks:
+```bash
+docker compose down
+docker network prune
+docker compose up -d
+```

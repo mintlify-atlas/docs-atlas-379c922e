@@ -1,0 +1,661 @@
+---
+title: Role-Based Access Control
+description: Fine-grained permissions with environment-scoped roles (Enterprise)
+---
+
+<Info>
+Role-Based Access Control (RBAC) requires an **Enterprise Edition** license.
+</Info>
+
+Dockhand's RBAC system provides granular control over user permissions. Create custom roles with specific permissions for different resources, and optionally scope roles to individual environments.
+
+## Overview
+
+### Free vs. Enterprise
+
+**Free Edition:**
+- All authenticated users have full access
+- No permission restrictions
+- Single "Admin" concept (all users are admins)
+
+**Enterprise Edition:**
+- Fine-grained permissions per resource type
+- Custom roles with specific permission sets
+- Environment-scoped roles
+- Admin role controls system-wide access
+
+## Permission Model
+
+### Resources
+
+Dockhand permissions are organized by resource type:
+
+- **containers** - Docker containers
+- **images** - Docker images
+- **volumes** - Docker volumes
+- **networks** - Docker networks
+- **stacks** - Docker Compose stacks
+- **environments** - Environment connections
+- **registries** - Registry credentials
+- **notifications** - Notification channels
+- **configsets** - Configuration templates
+- **settings** - Global settings
+- **users** - User management
+- **git** - Git repositories and stacks
+- **license** - License management
+- **audit_logs** - Audit log viewing
+- **activity** - Activity dashboard
+- **schedules** - Scheduled tasks
+
+### Actions
+
+Each resource supports different actions:
+
+- **view** - Read access (list, view details)
+- **create** - Create new resources
+- **edit** - Modify existing resources
+- **delete** - Remove resources
+- **execute** - Special actions (start, stop, restart containers)
+
+### Permission Format
+
+```typescript
+interface Permissions {
+  containers: string[];     // e.g., ["view", "create", "execute"]
+  images: string[];         // e.g., ["view"]
+  volumes: string[];        // e.g., ["view", "create"]
+  // ... other resources
+}
+```
+
+## Built-in Roles
+
+Dockhand includes two system roles:
+
+### Admin Role
+
+**Full access** to all resources and actions:
+
+```json
+{
+  "id": 1,
+  "name": "Admin",
+  "description": "Full system access",
+  "isSystem": true,
+  "permissions": {
+    "containers": ["view", "create", "edit", "delete", "execute"],
+    "images": ["view", "create", "edit", "delete"],
+    "volumes": ["view", "create", "edit", "delete"],
+    "networks": ["view", "create", "edit", "delete"],
+    "stacks": ["view", "create", "edit", "delete"],
+    "environments": ["view", "create", "edit", "delete"],
+    "registries": ["view", "create", "edit", "delete"],
+    "notifications": ["view", "create", "edit", "delete"],
+    "configsets": ["view", "create", "edit", "delete"],
+    "settings": ["view", "edit"],
+    "users": ["view", "create", "edit", "delete"],
+    "git": ["view", "create", "edit", "delete"],
+    "license": ["view", "edit"],
+    "audit_logs": ["view"],
+    "activity": ["view"],
+    "schedules": ["view", "create", "edit", "delete"]
+  },
+  "environmentIds": null  // All environments
+}
+```
+
+### Viewer Role
+
+**Read-only access** to most resources:
+
+```json
+{
+  "id": 99,
+  "name": "Viewer",
+  "description": "Read-only access",
+  "isSystem": true,
+  "permissions": {
+    "containers": ["view"],
+    "images": ["view"],
+    "volumes": ["view"],
+    "networks": ["view"],
+    "stacks": ["view"],
+    "environments": ["view"],
+    "registries": ["view"],
+    "activity": ["view"],
+    "schedules": ["view"]
+  },
+  "environmentIds": null  // All environments
+}
+```
+
+## Managing Roles
+
+### List Roles
+
+```bash
+curl http://localhost:8000/api/roles \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+[
+  {
+    "id": 1,
+    "name": "Admin",
+    "description": "Full system access",
+    "isSystem": true,
+    "permissions": { /* ... */ },
+    "environmentIds": null,
+    "createdAt": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": 2,
+    "name": "Docker Operators",
+    "description": "Manage containers and stacks",
+    "isSystem": false,
+    "permissions": { /* ... */ },
+    "environmentIds": [1, 2],
+    "createdAt": "2026-02-15T10:30:00Z"
+  }
+]
+```
+</ResponseExample>
+
+### Create Role
+
+```bash
+curl -X POST http://localhost:8000/api/roles \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "name": "Docker Operators",
+    "description": "Manage containers and stacks",
+    "permissions": {
+      "containers": ["view", "create", "edit", "execute"],
+      "images": ["view"],
+      "volumes": ["view"],
+      "networks": ["view"],
+      "stacks": ["view", "create", "edit"],
+      "environments": ["view"],
+      "activity": ["view"]
+    },
+    "environmentIds": null
+  }'
+```
+
+### Update Role
+
+```bash
+curl -X PATCH http://localhost:8000/api/roles/2 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "description": "Manage containers, stacks, and images",
+    "permissions": {
+      "containers": ["view", "create", "edit", "delete", "execute"],
+      "images": ["view", "create"],
+      "stacks": ["view", "create", "edit", "delete"],
+      "environments": ["view"],
+      "activity": ["view"]
+    }
+  }'
+```
+
+### Delete Role
+
+```bash
+curl -X DELETE http://localhost:8000/api/roles/2 \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<Warning>
+System roles (Admin, Viewer) cannot be deleted. Deleting a role removes it from all users.
+</Warning>
+
+## Assigning Roles to Users
+
+### Assign Role
+
+```bash
+curl -X POST http://localhost:8000/api/users/5/roles \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "roleId": 2,
+    "environmentId": null
+  }'
+```
+
+- **roleId**: ID of the role to assign
+- **environmentId**: Scope to specific environment (optional, `null` = all)
+
+### Assign Environment-Scoped Role
+
+```bash
+curl -X POST http://localhost:8000/api/users/5/roles \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "roleId": 2,
+    "environmentId": 3
+  }'
+```
+
+User will have this role's permissions **only** in environment 3.
+
+### List User Roles
+
+```bash
+curl http://localhost:8000/api/users/5/roles \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+[
+  {
+    "id": 10,
+    "userId": 5,
+    "roleId": 2,
+    "environmentId": null,
+    "role": {
+      "id": 2,
+      "name": "Docker Operators",
+      "permissions": { /* ... */ }
+    },
+    "createdAt": "2026-02-20T14:00:00Z"
+  },
+  {
+    "id": 11,
+    "userId": 5,
+    "roleId": 3,
+    "environmentId": 5,
+    "role": {
+      "id": 3,
+      "name": "Dev Team",
+      "permissions": { /* ... */ }
+    },
+    "createdAt": "2026-02-21T09:15:00Z"
+  }
+]
+```
+</ResponseExample>
+
+### Remove Role
+
+```bash
+curl -X DELETE http://localhost:8000/api/users/5/roles/2 \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+## Environment-Scoped Roles
+
+### Concept
+
+Roles can be scoped to specific environments:
+
+- **Global Role** (`environmentId: null`) - Applies to all environments
+- **Scoped Role** (`environmentId: 3`) - Applies only to environment 3
+
+### Example Scenario
+
+**User**: Alice  
+**Roles**:
+1. "Docker Operators" (global) - Manage containers everywhere
+2. "Dev Team" (environment 5) - Full access to dev environment
+
+**Effective Permissions**:
+- **Production (env 1)**: Docker Operators permissions (view, create containers)
+- **Staging (env 2)**: Docker Operators permissions
+- **Development (env 5)**: Merged Docker Operators + Dev Team permissions
+
+### Role Merging
+
+When a user has multiple roles for an environment, permissions are **merged** (union):
+
+```typescript
+// User has two roles:
+const role1 = { containers: ["view", "create"] };
+const role2 = { containers: ["execute"] };
+
+// Merged permissions:
+const merged = { containers: ["view", "create", "execute"] };
+```
+
+### Environment Access Control
+
+Roles with `environmentIds` restrict access:
+
+```json
+{
+  "name": "Production Team",
+  "permissions": { /* ... */ },
+  "environmentIds": [1]  // Only production environment
+}
+```
+
+Users with this role can **only** access environment 1, even if they have permissions for other resources.
+
+## Common Role Examples
+
+### Container Operator
+
+Manage containers but not delete:
+
+```json
+{
+  "name": "Container Operator",
+  "permissions": {
+    "containers": ["view", "create", "edit", "execute"],
+    "images": ["view"],
+    "networks": ["view"],
+    "volumes": ["view"],
+    "environments": ["view"],
+    "activity": ["view"]
+  }
+}
+```
+
+### Stack Manager
+
+Deploy and manage stacks:
+
+```json
+{
+  "name": "Stack Manager",
+  "permissions": {
+    "stacks": ["view", "create", "edit", "delete"],
+    "containers": ["view"],
+    "images": ["view"],
+    "networks": ["view", "create"],
+    "volumes": ["view", "create"],
+    "environments": ["view"],
+    "configsets": ["view"],
+    "activity": ["view"]
+  }
+}
+```
+
+### Environment Admin
+
+Full access to a specific environment:
+
+```json
+{
+  "name": "Production Admin",
+  "permissions": {
+    "containers": ["view", "create", "edit", "delete", "execute"],
+    "images": ["view", "create", "edit", "delete"],
+    "volumes": ["view", "create", "edit", "delete"],
+    "networks": ["view", "create", "edit", "delete"],
+    "stacks": ["view", "create", "edit", "delete"],
+    "activity": ["view"],
+    "schedules": ["view", "create", "edit", "delete"]
+  },
+  "environmentIds": [1]  // Production only
+}
+```
+
+### Security Auditor
+
+View-only access plus audit logs:
+
+```json
+{
+  "name": "Security Auditor",
+  "permissions": {
+    "containers": ["view"],
+    "images": ["view"],
+    "environments": ["view"],
+    "users": ["view"],
+    "audit_logs": ["view"],
+    "activity": ["view"]
+  }
+}
+```
+
+## Permission Checking
+
+### API Enforcement
+
+Every API endpoint checks permissions:
+
+```typescript
+import { authorize } from '$lib/server/authorize';
+
+export const POST: RequestHandler = async ({ cookies, request }) => {
+  const auth = await authorize(cookies);
+  
+  // Check authentication
+  if (!auth.isAuthenticated) {
+    return json({ error: 'Authentication required' }, { status: 401 });
+  }
+  
+  // Check permission
+  if (!await auth.can('containers', 'create')) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+  
+  // Proceed with action...
+};
+```
+
+### Environment Context
+
+Check permissions for a specific environment:
+
+```typescript
+const environmentId = 3;
+
+// Check environment access
+if (!await auth.canAccessEnvironment(environmentId)) {
+  return json({ error: 'Access denied to this environment' }, { status: 403 });
+}
+
+// Check permission in environment context
+if (!await auth.can('containers', 'create', environmentId)) {
+  return json({ error: 'Permission denied' }, { status: 403 });
+}
+```
+
+### UI Hiding
+
+The UI hides actions the user cannot perform:
+
+```svelte
+{#if $canCreate}
+  <button on:click={createContainer}>Create Container</button>
+{/if}
+```
+
+This is for UX only - **server-side checks are mandatory**.
+
+## LDAP/OIDC Integration
+
+### Automatic Role Assignment
+
+LDAP and OIDC providers can map groups to roles:
+
+**OIDC Example:**
+
+```json
+{
+  "roleMappingsClaim": "groups",
+  "roleMappings": [
+    {"claimValue": "docker-admins", "roleId": 1},
+    {"claimValue": "docker-operators", "roleId": 2},
+    {"claimValue": "dev-team", "roleId": 3}
+  ]
+}
+```
+
+**LDAP Example:**
+
+```json
+{
+  "groupBaseDn": "OU=Groups,DC=example,DC=com",
+  "roleMappings": [
+    {"groupDn": "CN=Docker Admins,OU=Groups,DC=example,DC=com", "roleId": 1},
+    {"groupDn": "CN=Docker Operators,OU=Groups,DC=example,DC=com", "roleId": 2}
+  ]
+}
+```
+
+### Role Sync
+
+Roles are synced on every login:
+
+1. User logs in via LDAP/OIDC
+2. Dockhand checks group memberships
+3. Assigns roles for groups user is in
+4. Removes roles for groups user is no longer in
+5. Keeps local roles (not managed by IdP) unchanged
+
+This ensures permissions stay in sync with your directory.
+
+## Database Schema
+
+### Roles Table
+
+```sql
+CREATE TABLE roles (
+  id INTEGER PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  description TEXT,
+  is_system BOOLEAN DEFAULT FALSE,
+  permissions TEXT NOT NULL,  -- JSON
+  environment_ids TEXT,       -- JSON array or NULL
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### User Roles Table
+
+```sql
+CREATE TABLE user_roles (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  environment_id INTEGER REFERENCES environments(id) ON DELETE CASCADE,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, role_id, environment_id)
+);
+```
+
+## Authorization Service
+
+Dockhand provides a centralized authorization service:
+
+```typescript
+import { authorize } from '$lib/server/authorize';
+
+const auth = await authorize(cookies);
+
+// Properties
+auth.authEnabled          // Is auth enabled?
+auth.isAuthenticated      // Valid session?
+auth.user                 // Authenticated user
+auth.isAdmin              // Has Admin role?
+auth.isEnterprise         // Enterprise license active?
+
+// Methods
+await auth.can('containers', 'create');                    // Check permission
+await auth.can('containers', 'create', envId);             // With environment context
+await auth.canAccessEnvironment(envId);                    // Check environment access
+await auth.getAccessibleEnvironmentIds();                  // List accessible environments
+await auth.canManageUsers();                               // Check user management
+await auth.canManageSettings();                            // Check settings access
+await auth.canViewAuditLog();                              // Check audit log access
+```
+
+See `src/lib/server/authorize.ts` for full details.
+
+## Best Practices
+
+### Role Design
+
+1. **Start broad, refine later** - Begin with Admin/Viewer, add custom roles as needed
+2. **Group by job function** - "Docker Operators", "Security Team", not "Alice's Role"
+3. **Use environment scoping** - Separate prod/staging/dev access
+4. **Avoid user-specific roles** - Roles should apply to multiple users
+
+### Permission Granularity
+
+1. **Balance security vs. usability** - Don't over-complicate
+2. **View permission is usually safe** - Most users should see most resources
+3. **Restrict delete carefully** - Production data should be protected
+4. **Settings need edit permission** - Otherwise users can't configure anything
+
+### Admin Role
+
+1. **Keep Admin count low** - 2-3 admins for small teams
+2. **Use environment-scoped roles** - Don't give everyone global admin
+3. **Audit admin actions** - Enable Enterprise audit logging
+4. **Have a backup local admin** - In case LDAP/OIDC fails
+
+### Environment Strategy
+
+1. **Scope sensitive environments** - Production should be restricted
+2. **Dev environments can be open** - Let developers experiment
+3. **Use global roles for operators** - They need access everywhere
+4. **Combine global + scoped roles** - Base permissions + environment-specific extras
+
+## Troubleshooting
+
+### User Has No Access
+
+**Issue:** User logs in but sees "No environments available."
+
+**Solutions:**
+1. Check user has at least one role assigned
+2. Verify role has environment access (global or scoped)
+3. Ensure environment exists and user has permissions
+4. Check role hasn't been deleted
+
+### Permission Denied Errors
+
+**Issue:** User gets 403 errors when performing actions.
+
+**Solutions:**
+1. Check user's roles have the required permission
+2. Verify permission applies to the correct environment
+3. Check role merging - user might have conflicting roles
+4. Review recent role changes
+
+### LDAP/OIDC Roles Not Syncing
+
+**Issue:** User's roles don't update after group changes.
+
+**Solutions:**
+1. User must log out and back in (roles sync on login)
+2. Verify IdP is sending updated group claims
+3. Check role mapping configuration
+4. Ensure roleId in mapping still exists
+
+## Source Code Reference
+
+- `src/lib/server/authorize.ts` - Authorization service
+- `src/lib/server/auth.ts:272-431` - Permission checking
+- `src/lib/server/db/schema/pg-schema.ts:251-270` - Database schema
+- `src/routes/api/roles/+server.ts` - Role CRUD
+- `src/routes/api/users/[id]/roles/+server.ts` - User role assignment
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="LDAP" icon="building" href="/auth/ldap">
+    Map Active Directory groups to roles
+  </Card>
+  <Card title="OIDC/SSO" icon="shield-halved" href="/auth/oidc">
+    Map IdP groups to roles
+  </Card>
+  <Card title="Local Users" icon="user" href="/auth/local-users">
+    Manually assign roles to users
+  </Card>
+  <Card title="Authentication" icon="shield" href="/auth/overview">
+    Back to authentication overview
+  </Card>
+</CardGroup>

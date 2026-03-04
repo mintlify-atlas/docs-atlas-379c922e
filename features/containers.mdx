@@ -1,0 +1,332 @@
+---
+title: 'Containers'
+description: 'Manage Docker containers with real-time monitoring, control, and advanced features'
+icon: 'box'
+---
+
+## Overview
+
+The Containers page is the central hub for managing all your Docker containers across environments. It provides real-time visibility into container status, resource usage, and health checks, with powerful tools for starting, stopping, updating, and monitoring containers.
+
+## Key Features
+
+### Real-Time Container Management
+
+- **Live Status Updates**: Container states update automatically via Server-Sent Events (SSE)
+- **Resource Monitoring**: CPU, memory, network, and disk I/O statistics refreshed every 5 seconds
+- **Health Checks**: Visual indicators for container health status (healthy, unhealthy, starting)
+- **Change Highlighting**: Configurable visual highlighting when resource metrics change significantly
+
+### Container Operations
+
+**Single Container Actions**:
+- Start, stop, pause, unpause, and restart containers
+- Remove containers (with force option)
+- Update containers to latest image versions
+- View detailed logs with follow mode
+- Open interactive terminal sessions
+- Inspect container configuration and metadata
+
+**Bulk Operations**:
+- Select multiple containers for batch operations
+- Bulk start, stop, restart, pause, unpause
+- Bulk remove with confirmation
+- Update multiple containers simultaneously
+
+### Container Creation
+
+Create containers with comprehensive configuration options:
+
+- **Image Selection**: Pull from registries or use local images
+- **Port Mappings**: Define host-to-container port mappings
+- **Volume Mounts**: Bind mounts and named volumes
+- **Environment Variables**: Set environment variables and secrets
+- **Network Configuration**: Attach to custom networks
+- **Resource Limits**: CPU and memory constraints
+- **Restart Policies**: Configure automatic restart behavior
+- **Labels**: Add custom labels for organization
+
+### Advanced Features
+
+**Auto-Update**:
+- Check for image updates across all containers
+- Schedule automatic updates with vulnerability scanning
+- Configure update policies per container
+- Vulnerability criteria: never, any, critical+high, critical only, or more than current
+
+**Terminal Access**:
+- Interactive shell access to running containers
+- Multiple concurrent terminal sessions
+- Shell detection (bash, sh, ash, zsh)
+- User selection (root or custom user)
+- Horizontal or vertical layout modes
+
+**File Browser**:
+- Browse container filesystem
+- Upload and download files
+- Edit files in-browser
+- View file permissions and metadata
+
+### Filtering and Search
+
+- **Text Search**: Search by container name, image, or stack name
+- **Status Filter**: Filter by running, paused, exited, created, dead, restarting
+- **Multi-Select Filters**: Combine multiple status filters
+- **Sortable Columns**: Sort by name, image, state, health, uptime, stack, IP, CPU, memory, ports
+
+### UI Features
+
+**Data Grid**:
+- Expandable rows for detailed information
+- Resizable columns
+- Persistent column widths and sort state
+- Skeleton loading states
+
+**Container Details**:
+- Container ID (click to copy)
+- Image name with tag
+- Status badge with color coding
+- Health status indicator
+- Uptime display
+- Stack/Compose project badge
+- Resource usage graphs
+- Network information (IP address, ports)
+- Volume count and details
+
+**Logs Panel**:
+- Real-time log streaming
+- Search and filter logs
+- Horizontal or vertical layout
+- Multiple log panels for different containers
+- Auto-scroll with manual override
+
+## How to Use
+
+### Creating a Container
+
+1. Click the **Create** button in the top-right corner
+2. **Select Image**:
+   - Pull from a registry by entering an image name
+   - Or select from locally available images
+3. **Configure Container**:
+   - Enter a unique container name
+   - Set port mappings (e.g., `8080:80`)
+   - Add environment variables
+   - Mount volumes for data persistence
+4. **Advanced Options** (optional):
+   - Set resource limits
+   - Configure restart policy
+   - Add labels
+   - Select network mode
+5. Click **Create** to start the container
+
+### Starting and Stopping Containers
+
+**Single Container**:
+- Click the **Play** icon to start a stopped container
+- Click the **Stop** icon to stop a running container
+- Use the **Pause** icon to freeze a running container
+
+**Multiple Containers**:
+1. Select containers using the checkboxes
+2. Click the bulk action button in the selection bar:
+   - **Start**: Start all selected stopped containers
+   - **Stop**: Stop all selected running containers
+   - **Restart**: Restart all selected containers
+
+### Checking for Updates
+
+1. Click **Check for updates** to scan all containers
+2. Review containers with available updates (highlighted in amber)
+3. Click **Update all** to update all containers at once
+4. Or click the update icon on individual containers
+5. Review vulnerability scan results (if enabled)
+6. Confirm or cancel the update
+
+### Viewing Logs
+
+1. Click the **Logs** icon on a container row
+2. Logs panel opens at the bottom (or side, depending on layout)
+3. Use the search box to filter log entries
+4. Click **Follow** to auto-scroll with new logs
+5. Click the **X** to close the logs panel
+
+### Opening a Terminal
+
+1. Click the **Terminal** icon on a container row
+2. Select the shell type (bash, sh, etc.)
+3. Select the user (root or custom)
+4. Click **Connect** to open the terminal
+5. Multiple terminals can be open simultaneously
+6. Switch between terminals using the tabs
+
+### Browsing Files
+
+1. Click the **Folder** icon to open the file browser
+2. Navigate directories by clicking folder names
+3. Click **Upload** to upload files
+4. Click **Download** to download files
+5. Click **Edit** to modify files in-browser
+
+## UI Walkthrough
+
+### Header Section
+
+- **Title**: "Containers" with total count
+- **Search Bar**: Filter containers by name, image, or stack
+- **Status Filter**: Multi-select dropdown for container states
+- **Create Button**: Opens container creation modal
+- **Check for Updates**: Scans for available image updates
+- **Update All**: Updates all containers with available updates
+- **Prune**: Removes stopped containers
+- **Refresh**: Manually refresh container list
+- **Layout Toggle**: Switch between horizontal and vertical layouts
+
+### Selection Bar
+
+Appears when containers are selected:
+- Number of selected containers
+- **Clear**: Deselect all containers
+- **Start/Stop/Restart/Pause/Unpause**: Bulk actions
+- **Update**: Update selected containers
+- **Remove**: Delete selected containers
+
+### Container Table
+
+**Columns**:
+- **Checkbox**: Select for bulk operations
+- **Name**: Container name (click to highlight)
+- **Image**: Image name and tag
+- **Status**: Running, stopped, paused, etc.
+- **Health**: Health check status
+- **Uptime**: Time since container started
+- **Stack**: Compose project name (if applicable)
+- **IP**: Container IP address
+- **Ports**: Published ports (clickable if public IP configured)
+- **CPU**: CPU usage percentage
+- **Memory**: Memory usage (MB/GB)
+- **Network**: Network I/O (Rx/Tx)
+- **Disk**: Disk I/O (Read/Write)
+- **Actions**: Quick action buttons
+
+**Action Icons**:
+- **Play/Stop**: Start or stop container
+- **Pause/Unpause**: Freeze or resume container
+- **Restart**: Restart container
+- **Update**: Update to latest image
+- **Logs**: View container logs
+- **Terminal**: Open interactive shell
+- **Inspect**: View container details
+- **Files**: Browse container filesystem
+- **Edit**: Modify container configuration
+- **Remove**: Delete container
+
+### Bottom Panel (Logs/Terminal)
+
+- **Tabs**: Switch between active log/terminal sessions
+- **Close Button**: Close the current panel
+- **Resize Handle**: Drag to adjust panel height
+- **Layout Toggle**: Switch to vertical layout (panel on right)
+
+## Real Examples
+
+### Example: Running a Web Application
+
+```yaml
+# Container Configuration
+Name: my-web-app
+Image: nginx:latest
+Ports: 8080:80, 8443:443
+Volumes: /data/www:/usr/share/nginx/html
+Environment:
+  NGINX_HOST=example.com
+  NGINX_PORT=80
+Restart Policy: unless-stopped
+```
+
+### Example: Database Container with Backup
+
+```yaml
+Name: postgres-db
+Image: postgres:15
+Ports: 5432:5432
+Volumes:
+  - postgres-data:/var/lib/postgresql/data
+  - /backups:/backups
+Environment:
+  POSTGRES_PASSWORD=secret
+  POSTGRES_USER=admin
+  POSTGRES_DB=myapp
+Restart Policy: always
+Memory Limit: 2GB
+```
+
+### Example: Microservice with Health Check
+
+```yaml
+Name: api-service
+Image: myapp/api:v1.2.3
+Ports: 3000:3000
+Network: app-network
+Healthcheck:
+  Test: curl -f http://localhost:3000/health
+  Interval: 30s
+  Timeout: 5s
+  Retries: 3
+Labels:
+  app=myapp
+  tier=backend
+  version=1.2.3
+```
+
+## Database Schema
+
+Container data is tracked through the Docker API and enhanced with metadata from these tables:
+
+**auto_update_settings**:
+- Container auto-update configuration
+- Schedule types: daily, weekly, cron expression
+- Vulnerability criteria for blocking updates
+- Last checked and last updated timestamps
+
+**container_pending_updates**:
+- Containers with available updates
+- Current and new image tags
+- Stored until update is applied or dismissed
+
+## Technical Details
+
+### Real-Time Updates
+
+- **SSE Connection**: Subscribes to Docker events for container changes
+- **Stats Polling**: Fetches container statistics every 5 seconds via streaming API
+- **Event Types**: start, stop, create, destroy, die, kill, pause, unpause, restart, health_status
+- **Automatic Refresh**: On tab visibility change, reconnects and refreshes data
+
+### Performance Optimizations
+
+- **Lazy Loading**: Stats only fetched for visible containers
+- **Debounced Search**: 200ms delay on search input
+- **Virtual Scrolling**: Efficient rendering for large container lists
+- **Cached Shell Detection**: Shells detected once per container per session
+
+### State Management
+
+- **Persistent Store**: Container data persists across page navigations
+- **Local Storage**: Column widths, sort state, expanded rows, status filters
+- **URL Parameters**: Search query preserved in URL
+
+### API Endpoints
+
+- `GET /api/containers` - List all containers
+- `POST /api/containers` - Create new container
+- `GET /api/containers/stats/stream` - Stream container statistics
+- `POST /api/containers/:id/start` - Start container
+- `POST /api/containers/:id/stop` - Stop container
+- `POST /api/containers/:id/restart` - Restart container
+- `POST /api/containers/:id/pause` - Pause container
+- `POST /api/containers/:id/unpause` - Unpause container
+- `DELETE /api/containers/:id` - Remove container
+- `POST /api/containers/check-updates` - Check for image updates
+- `POST /api/containers/batch-update` - Update multiple containers
+- `POST /api/prune/containers` - Prune stopped containers

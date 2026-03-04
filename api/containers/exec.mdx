@@ -1,0 +1,213 @@
+---
+title: Container Exec
+description: Execute commands and create interactive terminal sessions in containers
+---
+
+## Create Exec Instance
+
+<RequestExample>
+```bash
+POST /api/containers/{id}/exec?envId=1
+```
+</RequestExample>
+
+Creates an exec instance for running commands in a container. This is typically used to establish interactive terminal sessions. The returned exec ID can be used with a WebSocket connection to interact with the terminal.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="envId" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Request Body
+
+<ParamField body="shell" type="string" default="/bin/sh">
+  The shell to execute. Common values:
+  - `/bin/sh` - Bourne shell (most compatible)
+  - `/bin/bash` - Bash shell
+  - `/bin/zsh` - Z shell
+  - `/bin/ash` - Almquist shell (Alpine Linux)
+</ParamField>
+
+<ParamField body="user" type="string" default="root">
+  The user to run the command as. Can be:
+  - Username (e.g., "root", "www-data")
+  - UID (e.g., "1000")
+  - UID:GID (e.g., "1000:1000")
+</ParamField>
+
+### Response
+
+<ResponseField name="execId" type="string">
+  The ID of the created exec instance. Use this with a WebSocket connection to interact with the terminal.
+</ResponseField>
+
+<ResponseField name="connectionInfo" type="object">
+  Information about the Docker connection for establishing the WebSocket connection
+  
+  <ResponseField name="type" type="string">
+    Connection type: "socket", "http", "https", or "hawser-edge"
+  </ResponseField>
+  
+  <ResponseField name="host" type="string">
+    Docker host address (for http/https connections)
+  </ResponseField>
+  
+  <ResponseField name="port" type="number">
+    Docker port (for http/https connections)
+  </ResponseField>
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Exec instance created successfully
+- `401` - Unauthorized (authentication required)
+- `403` - Permission denied
+- `500` - Failed to create exec instance
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X POST "https://your-dockhand.com/api/containers/abc123def456/exec?envId=1" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=your-session-cookie" \
+  -d '{
+    "shell": "/bin/bash",
+    "user": "root"
+  }'
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/exec?envId=1`, {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    shell: '/bin/bash',
+    user: 'root'
+  })
+});
+
+const result = await response.json();
+console.log('Exec ID:', result.execId);
+
+// Use the execId to establish a WebSocket connection
+// WebSocket URL format: ws://your-dockhand.com/api/containers/exec/{execId}/attach
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "execId": "f1e2d3c4b5a6",
+  "connectionInfo": {
+    "type": "socket",
+    "host": "localhost",
+    "port": 2375
+  }
+}
+```
+
+## Using the Exec Instance
+
+After creating an exec instance, establish a WebSocket connection to interact with the terminal:
+
+### WebSocket Connection
+
+Connect to the exec instance using a WebSocket:
+
+```
+ws://your-dockhand.com/api/containers/exec/{execId}/attach?envId=1
+```
+
+The WebSocket connection provides:
+- **Bidirectional communication**: Send commands and receive output
+- **Terminal control sequences**: Full terminal emulation support
+- **Real-time interaction**: Interactive shell experience
+
+### Terminal Interaction
+
+Once connected:
+1. Send terminal input through the WebSocket (keyboard input, control sequences)
+2. Receive terminal output through the WebSocket (command output, prompts)
+3. Handle terminal resize events by sending resize commands
+4. Close the WebSocket when done to terminate the session
+
+### Example Terminal Session
+
+<CodeGroup>
+```javascript JavaScript WebSocket
+const execId = 'f1e2d3c4b5a6';
+const ws = new WebSocket(
+  `ws://your-dockhand.com/api/containers/exec/${execId}/attach?envId=1`
+);
+
+ws.onopen = () => {
+  console.log('Terminal connected');
+  // Send a command
+  ws.send('ls -la\n');
+};
+
+ws.onmessage = (event) => {
+  // Receive terminal output
+  console.log('Output:', event.data);
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('Terminal disconnected');
+};
+
+// Send more commands
+setTimeout(() => {
+  ws.send('pwd\n');
+}, 1000);
+
+// Close the connection
+setTimeout(() => {
+  ws.send('exit\n');
+  ws.close();
+}, 5000);
+```
+</CodeGroup>
+
+### Terminal Resize
+
+To resize the terminal (e.g., when the user's window changes size), send a resize request:
+
+```
+POST /api/containers/exec/{execId}/resize?h=24&w=80&envId=1
+```
+
+Parameters:
+- `h`: Height in rows (e.g., 24)
+- `w`: Width in columns (e.g., 80)
+- `envId`: Environment ID
+
+### Notes
+
+- The exec instance is created with TTY and stdin enabled for interactive use
+- Each exec instance is single-use - create a new one for each terminal session
+- The WebSocket connection must be established promptly after creating the exec instance
+- Closing the WebSocket terminates the exec session
+- All terminal emulation features are supported (colors, cursor movement, etc.)
+- The default shell `/bin/sh` is the most portable across different container images

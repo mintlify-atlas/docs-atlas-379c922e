@@ -1,0 +1,396 @@
+---
+title: 'Images'
+description: 'Manage Docker images with pulling, building, tagging, scanning, and registry operations'
+icon: 'images'
+---
+
+## Overview
+
+The Images page provides comprehensive management of Docker images across all your environments. It includes image pulling from registries, vulnerability scanning, tagging operations, exporting, and pushing to remote registries.
+
+## Key Features
+
+### Image Management
+
+- **Repository Grouping**: Images grouped by repository name with expandable tag view
+- **Multi-Tag Support**: View all tags for an image in a single interface
+- **Size Information**: Total size per repository and per tag
+- **Usage Tracking**: See which containers are using each image
+- **Created Dates**: Timestamp for when each image was built
+
+### Image Operations
+
+**Pull from Registry**:
+- Pull images from Docker Hub or custom registries
+- Search Docker Hub directly from the pull modal
+- Support for private registries with authentication
+- Optional vulnerability scan after pull
+
+**Push to Registry**:
+- Push images to configured registries (excluding Docker Hub)
+- Automatic image tagging before push
+- Progress tracking during push operation
+- Registry credential management
+
+**Tag Management**:
+- Add new tags to existing images
+- Tag format: `repository:tag`
+- Multiple tags per image
+- Remove unused tags
+
+**Image Removal**:
+- Delete unused images (with confirmation)
+- Force removal of images in use
+- Bulk removal of multiple images
+- Prune dangling images (untagged intermediate layers)
+- Prune all unused images
+
+### Vulnerability Scanning
+
+**Scanner Integration**:
+- Support for Trivy and Grype scanners
+- Per-environment scanner configuration
+- Scan images on-demand or after pull
+- Vulnerability database auto-update
+
+**Scan Results**:
+- Severity breakdown (Critical, High, Medium, Low)
+- CVE identifiers and descriptions
+- Package information (name, version)
+- Fix availability status
+- CVSS scores
+- Reference links for more information
+
+### Export and Import
+
+**Export Images**:
+- Export as TAR or TAR.GZ format
+- Configurable compression in settings
+- Download directly to browser
+- Preserves all layers and metadata
+
+**Run from Image**:
+- Quick container creation from image
+- Pre-filled image name
+- Opens create container modal
+- All container configuration options available
+
+### Filtering and Search
+
+- **Text Search**: Search by repository name, tag, or image ID
+- **Usage Filter**: Show all, in-use, or unused images
+- **Sortable Columns**: Sort by name, size, tags, created date
+- **Persistent Filters**: Filter state saved across sessions
+
+### UI Features
+
+**Repository View**:
+- Grouped by repository name
+- Tag count badge
+- Unused badge for images not in use
+- Quick actions for first tag when collapsed
+- Expand to see all tags with details
+
+**Tag Details** (Expanded View):
+- Individual tag name
+- Short image ID (click to copy full ID)
+- Image size
+- Created timestamp
+- Container usage count (clickable to see containers)
+- Per-tag action buttons
+
+## How to Use
+
+### Pulling an Image
+
+1. Click the **Pull** button in the top-right corner
+2. **Search for Image**:
+   - Enter image name (e.g., `nginx`, `postgres:15`)
+   - Or use search to find images on Docker Hub
+3. **Select Registry** (if multiple configured):
+   - Docker Hub (default)
+   - Private registry from your configured list
+4. **Options**:
+   - Check "Scan for vulnerabilities" to run scan after pull
+   - Select scanner (if multiple available)
+5. Click **Pull** to download the image
+6. Progress bar shows download status
+7. Scan results appear if scanning is enabled
+
+### Tagging an Image
+
+1. Expand the repository to show all tags
+2. Click the **Tag** icon on the desired image
+3. **Configure New Tag**:
+   - Repository name (e.g., `myregistry.com/myapp`)
+   - Tag name (e.g., `v1.0.0`, `latest`)
+4. Click **Tag** to create the new tag
+5. New tag appears in the repository group
+
+### Pushing to a Registry
+
+1. Click the **Push** icon on an image tag
+2. **Select Target Registry**:
+   - Choose from configured registries
+   - Docker Hub is excluded (use docker.com directly)
+3. **Configure Tag** (optional):
+   - Change repository name if needed
+   - Update tag name
+4. Click **Push** to upload
+5. Progress shows upload status
+6. Image is now available in the remote registry
+
+### Scanning for Vulnerabilities
+
+1. Click the **Shield** icon on an image tag
+2. Scanner runs in background
+3. **Review Results**:
+   - Summary cards show counts by severity
+   - Critical vulnerabilities highlighted in red
+   - High severity in orange
+   - Medium in yellow
+   - Low in blue
+4. **Vulnerability Details**:
+   - CVE identifier
+   - Affected package and version
+   - Severity score (CVSS)
+   - Fix available (yes/no)
+   - Description and references
+5. Export scan results as JSON
+
+### Running a Container from Image
+
+1. Click the **Play** icon on an image
+2. Create container modal opens
+3. Image name is pre-filled
+4. Configure container settings
+5. Click **Create** to run container
+
+### Exporting an Image
+
+1. Expand repository to show tags
+2. Click the **Download** icon on a tag
+3. Image exports in background
+4. Download starts automatically
+5. Format determined by global settings (TAR or TAR.GZ)
+
+### Removing Images
+
+**Single Image**:
+1. Expand repository to show tag
+2. Click **Remove** icon (only visible on unused images)
+3. Confirm deletion
+4. Image is removed from Docker
+
+**Multiple Images**:
+1. Select images using checkboxes
+2. Click **Delete** in the selection bar
+3. Confirm bulk deletion
+4. All selected images are removed
+
+**Prune Operations**:
+- **Prune**: Removes dangling images (untagged intermediate layers)
+- **Prune Unused**: Removes ALL images not used by any container (including tagged)
+
+## UI Walkthrough
+
+### Header Section
+
+- **Title**: "Images" with count (filtered/total if search active)
+- **Search Bar**: Filter by name, tag, or ID
+- **Usage Filter**: Dropdown for all/in-use/unused
+- **Prune Button**: Remove dangling images
+- **Prune Unused Button**: Remove all unused images (with warning)
+- **Pull Button**: Open image pull modal
+- **Refresh**: Manually refresh image list
+
+### Selection Bar
+
+Appears when images are selected:
+- Number of selected images
+- **Clear**: Deselect all images
+- **Delete**: Remove selected images (bulk operation)
+
+### Image Table (Repository View)
+
+**Columns**:
+- **Checkbox**: Select for bulk operations
+- **Expand**: Arrow to show/hide tags
+- **Image**: Repository name with tag count
+- **Tags**: Number of tags badge
+- **Size**: Total size (or largest tag)
+- **Updated**: Most recent creation date
+- **Actions**: Quick actions for first tag (when collapsed)
+
+**Status Badges**:
+- **Unused**: Amber badge when no containers use the image
+- **Some Unused**: Gray badge when some tags are unused
+- **Built-in**: Badge for Docker system images
+
+### Expanded Tag View
+
+**Tag Columns**:
+- **Tag**: Tag name ("latest" in blue)
+- **ID**: Short image ID (click to copy)
+- **Size**: Individual tag size
+- **Created**: Timestamp
+- **Used By**: Container count (clickable link)
+- **Actions**: Full action menu
+
+**Tag Action Icons**:
+- **Layers**: View image history and layers
+- **Play**: Run container from image
+- **Shield**: Scan for vulnerabilities
+- **Upload**: Push to registry
+- **Download**: Export image
+- **Tag**: Add new tag
+- **Remove**: Delete image (unused only)
+
+### Image History Modal
+
+Shows layer-by-layer breakdown:
+- Layer ID
+- Created timestamp
+- Command that created the layer
+- Layer size
+- Comment (if any)
+
+### Vulnerability Scan Modal
+
+**Summary Section**:
+- Total vulnerabilities count
+- Critical, High, Medium, Low counts with color coding
+- Scan timestamp
+- Scanner version
+
+**Vulnerability List**:
+- CVE ID (clickable for external info)
+- Package name and version
+- Severity badge
+- CVSS score
+- Fix available indicator
+- Description
+- References
+
+**Export Options**:
+- Export as JSON
+- Export as CSV
+- Copy to clipboard
+
+## Real Examples
+
+### Example: Multi-Tag Image
+
+```
+Repository: myapp/api
+Tags:
+  - latest (1.2 GB) - Created 2 days ago - 3 containers
+  - v1.2.0 (1.2 GB) - Created 2 days ago - 0 containers
+  - v1.1.0 (1.1 GB) - Created 1 week ago - 1 container
+  - dev (1.3 GB) - Created 5 hours ago - 2 containers
+```
+
+### Example: Vulnerability Scan Results
+
+```
+Image: nginx:latest
+Scanner: Trivy v0.48.0
+Scan Date: 2024-03-04 10:30:00
+
+Summary:
+- Critical: 2
+- High: 5
+- Medium: 12
+- Low: 34
+
+Critical Vulnerabilities:
+1. CVE-2023-12345
+   Package: openssl (1.1.1)
+   Severity: Critical (CVSS 9.8)
+   Fix: Upgrade to 1.1.1w
+   Description: Remote code execution vulnerability
+
+2. CVE-2023-67890
+   Package: libssl3 (3.0.2)
+   Severity: Critical (CVSS 9.1)
+   Fix: Upgrade to 3.0.8
+   Description: Buffer overflow vulnerability
+```
+
+### Example: Private Registry Configuration
+
+```yaml
+Registry Configuration:
+Name: Production Registry
+URL: registry.company.com
+Username: jenkins
+Password: ********
+Default: No
+
+Pull Command:
+  docker pull registry.company.com/myapp:latest
+
+Push Command:
+  docker tag myapp:latest registry.company.com/myapp:v1.0.0
+  docker push registry.company.com/myapp:v1.0.0
+```
+
+## Database Schema
+
+**registries**:
+- Registry name and URL
+- Authentication credentials (encrypted)
+- Default registry flag
+- Created and updated timestamps
+
+**container_pending_updates** (related):
+- Links images to containers with available updates
+- Tracks current and new image tags
+
+**Environment settings** (scanner configuration):
+- Scanner type (trivy, grype, none)
+- Scanner path and database location
+- Auto-update schedule for vulnerability database
+
+## Technical Details
+
+### Image Grouping Algorithm
+
+1. Parse all image tags
+2. Extract repository name (everything before last `:`)
+3. Group images by repository
+4. Sort tags within group by creation date
+5. Calculate aggregate size (max of all tags)
+
+### Pull Operation
+
+- Streams image pull progress
+- Shows layer download status
+- Supports image manifest inspection
+- Handles multi-architecture images
+
+### Vulnerability Scanning
+
+**Trivy Scanner**:
+- Uses local vulnerability database
+- Scans OS packages and language libraries
+- Checks for known CVEs
+- Provides fix recommendations
+
+**Grype Scanner**:
+- Alternative to Trivy
+- Same vulnerability sources
+- Different output format
+
+### API Endpoints
+
+- `GET /api/images` - List all images
+- `POST /api/images/pull` - Pull image from registry
+- `POST /api/images/:id/tag` - Tag an image
+- `POST /api/images/:id/push` - Push to registry
+- `DELETE /api/images/:id` - Remove image
+- `GET /api/images/:id/history` - Get image layers
+- `GET /api/images/:id/export` - Export image
+- `POST /api/images/:name/scan` - Scan for vulnerabilities
+- `POST /api/prune/images` - Prune dangling images
+- `GET /api/registries` - List configured registries

@@ -1,0 +1,197 @@
+---
+title: 'Delete Stack'
+api: 'DELETE /api/stacks/{name}'
+description: 'Remove a compose stack and its resources'
+---
+
+## Path Parameters
+
+<ParamField path="name" type="string" required>
+  Stack name (URL-encoded)
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="env" type="string" required>
+  Environment ID where the stack exists
+</ParamField>
+
+<ParamField query="force" type="boolean" default={false}>
+  Force deletion without confirmation. Removes containers, networks, volumes, and files.
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion succeeded
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if deletion failed
+</ResponseField>
+
+## Behavior
+
+- Stops and removes all containers in the stack
+- Removes networks created by the stack (if not in use by other containers)
+- Removes named volumes (when `force=true`)
+- Deletes compose file, .env file, and stack directory
+- Removes stack from database
+- For Git stacks, also removes Git repository clone and unregisters auto-sync schedule
+
+## Deletion Process
+
+1. Runs `docker compose down` (with `-v` flag if `force=true`)
+2. Deletes compose file and environment file
+3. Removes stack directory
+4. Removes database records (stack sources, environment variables)
+5. For Git stacks: removes repository clone and schedules
+
+<RequestExample>
+
+```bash Standard Delete
+curl -X DELETE "https://your-dockhand-instance.com/api/stacks/my-app?env=1" \
+  -H "Cookie: auth_token=your_token"
+```
+
+```bash Force Delete (with volumes)
+curl -X DELETE "https://your-dockhand-instance.com/api/stacks/my-app?env=1&force=true" \
+  -H "Cookie: auth_token=your_token"
+```
+
+```javascript JavaScript
+// Standard delete
+const response = await fetch('/api/stacks/my-app?env=1', {
+  method: 'DELETE',
+  credentials: 'include'
+});
+
+const result = await response.json();
+
+// Force delete with volumes
+const forceResponse = await fetch('/api/stacks/my-app?env=1&force=true', {
+  method: 'DELETE',
+  credentials: 'include'
+});
+
+const forceResult = await forceResponse.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Success
+{
+  "success": true
+}
+```
+
+```json Error
+{
+  "success": false,
+  "error": "Failed to remove stack: stack is still running"
+}
+```
+
+</ResponseExample>
+
+## Force Delete vs Standard Delete
+
+<CardGroup cols={2}>
+  <Card title="Standard Delete" icon="trash">
+    - Stops containers
+    - Removes containers
+    - Removes networks (if unused)
+    - **Preserves volumes**
+    - Deletes compose files
+  </Card>
+  
+  <Card title="Force Delete" icon="trash-can">
+    - Stops containers
+    - Removes containers
+    - Removes networks (if unused)
+    - **Removes volumes**
+    - Deletes compose files
+  </Card>
+</CardGroup>
+
+## Important Notes
+
+<Warning>
+  Force deletion (`force=true`) **permanently removes all volumes** associated with the stack. This includes databases, uploaded files, and any persistent data. This action cannot be undone.
+</Warning>
+
+<Info>
+  Networks are only removed if they are not in use by other containers. Shared networks will be preserved.
+</Info>
+
+<Note>
+  External stacks (adopted stacks) only have their Dockhand metadata removed. The actual compose files at the external location are **not deleted**.
+</Note>
+
+## What Gets Deleted
+
+### Internal Stacks (Created via Dockhand)
+- All containers
+- All networks (if unused)
+- All volumes (if `force=true`)
+- Compose file at `/data/stacks/{name}/compose.yaml`
+- Environment file at `/data/stacks/{name}/.env`
+- Stack directory at `/data/stacks/{name}/`
+- Database records
+
+### Git Stacks
+- All containers
+- All networks (if unused)
+- All volumes (if `force=true`)
+- Git repository clone at `/data/git-repos/repo-{id}/`
+- Database records
+- Auto-sync schedules
+
+### External Stacks (Adopted)
+- All containers
+- All networks (if unused)
+- All volumes (if `force=true`)
+- Database records only
+- **Original files are NOT deleted**
+
+## Error Responses
+
+### 400 Bad Request
+
+```json
+{
+  "success": false,
+  "error": "Stack is currently running. Stop it first or use force=true"
+}
+```
+
+### 403 Forbidden
+
+- User lacks `stacks:remove` permission
+- User cannot access the specified environment
+
+### 404 Not Found
+
+```json
+{
+  "error": "Compose file not found for stack \"my-app\". The stack may have been deleted or was created outside of Dockhand."
+}
+```
+
+### 500 Internal Server Error
+
+- Docker daemon error
+- File system error
+- Database error
+
+## Permissions
+
+Requires `stacks:remove` permission for the specified environment.
+
+## Related Endpoints
+
+- [List Stacks](/api/stacks/list) - View all stacks
+- [Deploy Stack](/api/stacks/deploy) - Create a new stack
+- [Update Stack](/api/stacks/update) - Modify an existing stack

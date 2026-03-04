@@ -1,0 +1,1029 @@
+---
+title: Architecture
+description: Technical architecture of Dockhand including SvelteKit frontend, Bun runtime, Drizzle ORM, Docker API integration, and Wolfi-based OS
+---
+
+## Overview
+
+Dockhand is built with a modern, security-focused architecture that emphasizes performance, maintainability, and minimal dependencies. The application follows a server-side rendering (SSR) approach with progressive enhancement for optimal user experience.
+
+<Info>
+Dockhand runs on a custom Wolfi-based OS built from scratch using apko, with every package explicitly declared for maximum security.
+</Info>
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Browser / Client                        │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  Svelte 5 Components + SvelteKit 2 Frontend           │  │
+│  │  - shadcn-svelte UI components                        │  │
+│  │  - TailwindCSS styling                                │  │
+│  │  - xterm.js for terminals                             │  │
+│  │  - CodeMirror for editors                             │  │
+│  │  - Cytoscape.js for graphs                            │  │
+│  └───────────────────────────────────────────────────────┘  │
+└──────────────────┬──────────────────────────────────────────┘
+                   │ HTTP/WebSocket/SSE
+┌──────────────────▼──────────────────────────────────────────┐
+│              Dockhand Application Server                     │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │         SvelteKit API Routes (Backend)                │  │
+│  │  - Request handling & validation                      │  │
+│  │  - Authentication & authorization                     │  │
+│  │  - Business logic orchestration                       │  │
+│  └────┬────────────────────────────────────────────┬─────┘  │
+│       │                                            │         │
+│  ┌────▼─────────────┐                    ┌────────▼──────┐  │
+│  │  Server Modules  │                    │  Bun Runtime  │  │
+│  │  - docker.ts     │                    │  - Fast JS    │  │
+│  │  - stacks.ts     │                    │  - Native TS  │  │
+│  │  - db.ts         │                    │  - Built-in   │  │
+│  │  - auth.ts       │                    │    fetch      │  │
+│  │  - git.ts        │                    └───────────────┘  │
+│  │  - scheduler.ts  │                                        │
+│  └────┬─────────────┘                                        │
+│       │                                                      │
+│  ┌────▼──────────────────────────────────────────────────┐  │
+│  │              Drizzle ORM Layer                        │  │
+│  │  - Type-safe database queries                         │  │
+│  │  - SQLite or PostgreSQL support                       │  │
+│  └────┬──────────────────────────────────────────────────┘  │
+│       │                                                      │
+│  ┌────▼────────┐                                             │
+│  │  SQLite DB  │  or  ┌──────────────────┐                  │
+│  │  (default)  │      │  PostgreSQL DB   │                  │
+│  └─────────────┘      └──────────────────┘                  │
+└──────────────────┬──────────────────────────────────────────┘
+                   │ Docker API (Unix socket / TCP)
+┌──────────────────▼──────────────────────────────────────────┐
+│                   Docker Engine(s)                           │
+│  - Local Unix socket: /var/run/docker.sock                   │
+│  - Remote TCP: https://remote-host:2376                      │
+│  - Hawser agents: Edge or standard deployment                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## Frontend Architecture
+
+The frontend is built with modern web technologies for maximum performance and developer experience.
+
+### SvelteKit 2 & Svelte 5
+
+Core framework features:
+
+- **Server-Side Rendering (SSR)**: Initial page loads are rendered on the server for fast first paint
+- **Progressive Enhancement**: Works without JavaScript, enhanced when available
+- **File-based Routing**: Routes defined by file structure in `src/routes/`
+- **API Routes**: Backend endpoints colocated with frontend pages
+- **Type Safety**: Full TypeScript support with generated types
+
+```typescript
+// Example: SvelteKit load function with type safety
+import type { PageLoad } from './$types';
+
+export const load: PageLoad = async ({ fetch, params }) => {
+  const response = await fetch(`/api/containers/${params.id}`);
+  const container = await response.json();
+  return { container };
+};
+```
+
+### Svelte 5 Runes
+
+Dockhand uses Svelte 5's new reactivity system:
+
+```svelte
+<script lang="ts">
+  // State management with runes
+  let containers = $state<Container[]>([]);
+  let loading = $state(true);
+  let filter = $state('');
+  
+  // Derived state
+  const filteredContainers = $derived.by(() => {
+    return containers.filter(c => c.name.includes(filter));
+  });
+  
+  // Effects for side effects
+  $effect(() => {
+    if (browser) {
+      fetchContainers();
+    }
+  });
+</script>
+```
+
+### UI Components
+
+Built with shadcn-svelte and TailwindCSS:
+
+<CardGroup cols={2}>
+  <Card title="shadcn-svelte" icon="component">
+    Accessible component library with bits-ui primitives for modals, dropdowns, tooltips, etc.
+  </Card>
+  
+  <Card title="TailwindCSS v4" icon="paintbrush">
+    Utility-first CSS with Vite plugin for optimal performance
+  </Card>
+  
+  <Card title="Lucide Icons" icon="icons">
+    Consistent iconography with lucide-svelte
+  </Card>
+  
+  <Card title="Mode Watcher" icon="moon">
+    Dark/light theme with system preference detection
+  </Card>
+</CardGroup>
+
+### Specialized Components
+
+**Terminal Emulator** (`xterm.js`):
+```typescript
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+
+const term = new Terminal({ theme, cursorBlink: true });
+const fitAddon = new FitAddon();
+term.loadAddon(fitAddon);
+term.loadAddon(new WebLinksAddon());
+```
+
+**Code Editor** (`CodeMirror 6`):
+```typescript
+import { EditorView } from '@codemirror/view';
+import { yaml } from '@codemirror/lang-yaml';
+import { oneDark } from '@codemirror/theme-one-dark';
+
+const editor = new EditorView({
+  extensions: [
+    yaml(),
+    oneDark,
+    // ... other extensions
+  ]
+});
+```
+
+**Dependency Graph** (`Cytoscape.js`):
+```typescript
+import cytoscape from 'cytoscape';
+
+const cy = cytoscape({
+  container: element,
+  elements: [
+    { data: { id: 'web', label: 'web' } },
+    { data: { id: 'db', label: 'postgres' } },
+    { data: { source: 'web', target: 'db' } }
+  ],
+  layout: { name: 'cose' }
+});
+```
+
+## Backend Architecture
+
+The backend is built with SvelteKit API routes and modular server-side code.
+
+### Bun Runtime
+
+Dockhand uses Bun as the JavaScript runtime:
+
+- **Fast execution**: Optimized JavaScript and TypeScript engine
+- **Native TypeScript**: No transpilation required
+- **Built-in fetch**: Node.js fetch API for HTTP requests
+- **WebSocket support**: Native WebSocket implementation
+- **Compatibility**: Node.js API compatibility layer
+
+<Note>
+The production Dockerfile uses Node.js 24 instead of Bun to avoid BoringSSL memory leaks on mTLS connections. Development can use either.
+</Note>
+
+### Server Module Structure
+
+```
+src/lib/server/
+├── auth.ts              # Authentication (Argon2id, OIDC, LDAP)
+├── authorize.ts         # RBAC authorization checks
+├── docker.ts            # Direct Docker API client
+├── stacks.ts            # Compose stack management
+├── git.ts               # Git repository operations
+├── db.ts                # Database operations wrapper
+├── encryption.ts        # AES-256-GCM credential encryption
+├── scheduler/           # Croner-based job scheduling
+├── audit.ts             # Audit logging
+├── notifications.ts     # Email/webhook/MQTT notifications
+├── scanner.ts           # Trivy/Grype integration
+├── hawser.ts            # Hawser remote agent protocol
+└── subprocess-manager.ts # Go collector process management
+```
+
+### Docker API Integration
+
+Direct API calls without dockerode:
+
+```typescript
+// src/lib/server/docker.ts
+export async function listContainers(
+  all: boolean = false,
+  envId?: number
+): Promise<ContainerInfo[]> {
+  const env = await getEnvironment(envId);
+  const endpoint = buildEndpoint(env, '/containers/json');
+  
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    agent: getAgent(env), // Unix socket or HTTP agent
+    headers: { 'Content-Type': 'application/json' }
+  });
+  
+  if (!response.ok) {
+    throw new DockerConnectionError('Failed to list containers', response);
+  }
+  
+  return response.json();
+}
+```
+
+**Connection Types**:
+
+<Steps>
+  <Step title="Unix Socket">
+    Local Docker socket at `/var/run/docker.sock` using custom agent
+  </Step>
+  
+  <Step title="TCP/TLS">
+    Remote Docker daemon via HTTPS with optional mTLS client certificates
+  </Step>
+  
+  <Step title="Hawser">
+    WebSocket-based protocol for edge deployments and NAT traversal
+  </Step>
+</Steps>
+
+### Compose Stack Management
+
+All stack operations use `docker compose` commands:
+
+```typescript
+// src/lib/server/stacks.ts
+export async function deployStack(
+  options: DeployStackOptions
+): Promise<StackOperationResult> {
+  const { name, compose, envId, envVars } = options;
+  
+  // Write compose.yaml to disk
+  const stackDir = getStackDir(name);
+  writeFileSync(join(stackDir, 'compose.yaml'), compose);
+  
+  // Prepare environment variables
+  const env = { ...process.env, ...envVars };
+  
+  // Execute docker compose up
+  const result = await executeCompose(
+    ['up', '-d', '--remove-orphans'],
+    { cwd: stackDir, env, envId }
+  );
+  
+  return result;
+}
+```
+
+**Stack Storage**:
+- **Internal**: `~/.dockhand/stacks/{stackName}/compose.yaml`
+- **Git**: `~/.dockhand/git/{repoId}/{stackName}/compose.yaml`
+- **External**: Detected via Docker labels, not stored
+
+### Authentication System
+
+Multi-provider authentication with security best practices:
+
+```typescript
+// src/lib/server/auth.ts
+import argon2 from 'argon2';
+
+export async function hashPassword(password: string): Promise<string> {
+  return argon2.hash(password, {
+    type: argon2.argon2id,  // Memory-hard, timing-attack resistant
+    memoryCost: 65536,      // 64 MB
+    timeCost: 3,            // 3 iterations
+    parallelism: 4          // 4 threads
+  });
+}
+
+export async function verifyPassword(
+  hash: string,
+  password: string
+): Promise<boolean> {
+  return argon2.verify(hash, password);
+}
+
+export async function createSession(userId: number): Promise<string> {
+  // Generate cryptographically secure 32-byte token
+  const token = Buffer.from(secureRandomBytes(32)).toString('hex');
+  
+  await dbCreateSession({
+    userId,
+    token,
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+  });
+  
+  return token;
+}
+```
+
+**Cookie Configuration**:
+```typescript
+const cookieOptions = {
+  httpOnly: true,           // Prevents XSS
+  secure: isProduction,     // HTTPS only in production
+  sameSite: 'strict',       // CSRF protection
+  path: '/',
+  maxAge: 30 * 24 * 60 * 60 // 30 days
+};
+```
+
+### Authorization (RBAC)
+
+Role-Based Access Control for Enterprise edition:
+
+```typescript
+// src/lib/server/authorize.ts
+export interface AuthContext {
+  user?: User;
+  roles: Role[];
+  permissions: Permissions;
+  authEnabled: boolean;
+  isEnterprise: boolean;
+  
+  can(resource: string, action: string, envId?: number): Promise<boolean>;
+  canAccessEnvironment(envId: number): Promise<boolean>;
+}
+
+export async function authorize(cookies: Cookies): Promise<AuthContext> {
+  const sessionToken = cookies.get(SESSION_COOKIE_NAME);
+  if (!sessionToken) {
+    return createGuestContext();
+  }
+  
+  const session = await getSession(sessionToken);
+  if (!session) {
+    return createGuestContext();
+  }
+  
+  const user = await getUser(session.userId);
+  const roles = await getUserRoles(user.id);
+  const permissions = mergePermissions(roles);
+  
+  return createAuthContext(user, roles, permissions);
+}
+```
+
+## Database Layer
+
+Type-safe database operations with Drizzle ORM.
+
+### Drizzle ORM
+
+Modern TypeScript ORM with zero-runtime overhead:
+
+```typescript
+// src/lib/server/db/drizzle.ts
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
+import * as schema from './schema';
+
+const sqlite = new Database(dbPath);
+export const db = drizzle(sqlite, { schema });
+
+// Type-safe queries
+export async function getEnvironment(id: number) {
+  return db.query.environments.findFirst({
+    where: eq(schema.environments.id, id)
+  });
+}
+
+export async function listContainers(envId: number) {
+  return db.query.containerEvents.findMany({
+    where: eq(schema.containerEvents.environmentId, envId),
+    orderBy: desc(schema.containerEvents.timestamp)
+  });
+}
+```
+
+### Schema Design
+
+Database tables are defined using Drizzle's schema builder:
+
+```typescript
+// Example: environments table
+export const environments = sqliteTable('environments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  connectionType: text('connection_type').notNull(),
+  socketPath: text('socket_path'),
+  host: text('host'),
+  port: integer('port'),
+  tls: integer('tls', { mode: 'boolean' }).default(false),
+  tlsCert: text('tls_cert'),        // PEM format
+  tlsKey: text('tls_key'),          // PEM format (encrypted)
+  tlsCa: text('tls_ca'),            // PEM format
+  tlsSkipVerify: integer('tls_skip_verify', { mode: 'boolean' }),
+  collectActivity: integer('collect_activity', { mode: 'boolean' }).default(true),
+  collectMetrics: integer('collect_metrics', { mode: 'boolean' }).default(true),
+  icon: text('icon').default('globe'),
+  labels: text('labels', { mode: 'json' }).$type<string[]>(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+```
+
+### Migration System
+
+Database migrations managed by Drizzle Kit:
+
+```bash
+# Generate migration from schema changes
+bun drizzle-kit generate:sqlite
+
+# Apply migrations
+bun drizzle-kit push:sqlite
+```
+
+Migrations are stored in:
+- `drizzle/` for SQLite
+- `drizzle-pg/` for PostgreSQL
+
+<Info>
+Migrations run automatically on application startup via `hooks.server.ts`.
+</Info>
+
+### Database Support
+
+<Accordion title="SQLite (Default)">
+  Using `better-sqlite3` for synchronous API and performance. Stored at `$DATA_DIR/dockhand.db`.
+</Accordion>
+
+<Accordion title="PostgreSQL">
+  Using `postgres` package for production deployments. Configured via `DATABASE_URL` environment variable.
+</Accordion>
+
+## Base Operating System
+
+Custom Wolfi-based OS built with apko for security and minimalism.
+
+### Wolfi OS
+
+Wolfi is a Linux distribution designed for containers:
+
+- **Minimal attack surface**: Only necessary packages included
+- **CVE-free**: Packages rebuilt to eliminate known vulnerabilities
+- **No shell required**: Distroless by default
+- **APK packages**: Fast package management
+- **Regular updates**: Chainguard maintains the repository
+
+### apko Build Process
+
+The Dockerfile uses apko to generate a custom OS:
+
+```dockerfile
+# Stage 1: OS Generator
+FROM alpine:3.21 AS os-builder
+
+# Generate apko.yaml with explicit packages
+RUN printf '%s\n' \
+  "contents:" \
+  "  repositories:" \
+  "    - https://packages.wolfi.dev/os" \
+  "  keyring:" \
+  "    - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub" \
+  "  packages:" \
+  "    - wolfi-base" \
+  "    - ca-certificates" \
+  "    - busybox" \
+  "    - docker-cli" \
+  "    - docker-compose" \
+  "    - git" \
+  "    - openssh-client" \
+  "    - postgresql-client" \
+  "    - sqlite" \
+  > apko.yaml
+
+# Build OS tarball
+RUN apko build apko.yaml dockhand-base:latest output.tar
+```
+
+**Packages Included**:
+- `wolfi-base`: Core system files
+- `ca-certificates`: TLS certificate trust store
+- `busybox`: Essential Unix utilities
+- `docker-cli`, `docker-compose`: Docker management
+- `git`, `openssh-client`: Git operations
+- `postgresql-client`, `sqlite`: Database clients
+- `tini`: Init system for proper signal handling
+- `su-exec`: User switching for PUID/PGID support
+
+### Multi-Stage Build
+
+```dockerfile
+# Stage 2: Application Builder
+FROM node:24-slim AS app-builder
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+RUN npm ci --omit=dev  # Production dependencies only
+
+# Stage 3: Final Image
+FROM scratch
+COPY --from=os-builder /work/rootfs/ /
+COPY --from=app-builder /usr/local/bin/node /usr/local/bin/node
+COPY --from=app-builder /app/build ./build
+COPY --from=app-builder /app/node_modules ./node_modules
+```
+
+<Warning>
+The final image is built from scratch with only the custom OS and application files. No base image vulnerabilities.
+</Warning>
+
+## Real-Time Communication
+
+Dockhand uses multiple protocols for real-time updates.
+
+### Server-Sent Events (SSE)
+
+One-way server-to-client streaming:
+
+```typescript
+// src/lib/server/sse.ts
+export function createSSEStream(
+  request: Request,
+  listener: (send: (data: any) => void) => () => void
+): Response {
+  const stream = new ReadableStream({
+    start(controller) {
+      const send = (data: any) => {
+        const message = `data: ${JSON.stringify(data)}\n\n`;
+        controller.enqueue(new TextEncoder().encode(message));
+      };
+      
+      const cleanup = listener(send);
+      
+      // Cleanup on close
+      request.signal.addEventListener('abort', () => {
+        cleanup();
+        controller.close();
+      });
+    }
+  });
+  
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    }
+  });
+}
+```
+
+**Use Cases**:
+- Dashboard real-time stats
+- Log streaming
+- Deployment progress
+- Event notifications
+
+### WebSocket
+
+Bi-directional communication for interactive features:
+
+```typescript
+// Example: Terminal WebSocket endpoint
+import { WebSocketServer } from 'ws';
+
+export const websocket = {
+  handler: (ws: WebSocket, request: Request) => {
+    const { containerId } = parseUrl(request.url);
+    
+    // Exec into container
+    const exec = await dockerExec(containerId, {
+      Cmd: ['/bin/sh'],
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: true
+    });
+    
+    // Pipe exec stream to WebSocket
+    exec.stdout.on('data', data => ws.send(data));
+    ws.on('message', data => exec.stdin.write(data));
+    
+    ws.on('close', () => exec.kill());
+  }
+};
+```
+
+**Use Cases**:
+- Interactive terminals
+- Container exec sessions
+- Real-time collaborative editing (future)
+
+## Monitoring & Metrics
+
+Optional metrics collection using a separate Go process.
+
+### Collection Worker
+
+Written in Go for performance:
+
+```go
+// collector/main.go
+package main
+
+func collectMetrics(ctx context.Context, envId int) {
+    client := createDockerClient()
+    
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-time.After(5 * time.Second):
+            containers := listContainers(client)
+            
+            for _, container := range containers {
+                stats := getContainerStats(client, container.ID)
+                storeMetrics(envId, container.ID, stats)
+            }
+        }
+    }
+}
+```
+
+**Collected Metrics**:
+- CPU percentage (calculated from CPU delta)
+- Memory usage (with cache separation)
+- Network RX/TX bytes
+- Block I/O read/write bytes
+
+### Metrics Storage
+
+In-memory storage with configurable retention:
+
+```typescript
+// src/lib/server/metrics-store.ts
+interface MetricsStore {
+  [envId: number]: {
+    [containerId: string]: ContainerStats[];
+  };
+}
+
+const metrics: MetricsStore = {};
+const MAX_POINTS = 360; // 30 minutes at 5-second intervals
+
+export function storeMetric(envId: number, containerId: string, stats: ContainerStats) {
+  if (!metrics[envId]) metrics[envId] = {};
+  if (!metrics[envId][containerId]) metrics[envId][containerId] = [];
+  
+  metrics[envId][containerId].push(stats);
+  
+  // Keep only last MAX_POINTS
+  if (metrics[envId][containerId].length > MAX_POINTS) {
+    metrics[envId][containerId].shift();
+  }
+}
+```
+
+## Security Architecture
+
+Security is built into every layer of Dockhand.
+
+### Threat Model
+
+<Steps>
+  <Step title="Authentication">
+    Prevent unauthorized access with Argon2id hashing, secure session tokens, and MFA support
+  </Step>
+  
+  <Step title="Authorization">
+    Enforce least privilege with RBAC, environment-level permissions, and resource-level checks
+  </Step>
+  
+  <Step title="Data Protection">
+    Encrypt sensitive data (credentials, certificates) with AES-256-GCM
+  </Step>
+  
+  <Step title="Network Security">
+    Use TLS for all remote connections, validate certificates, support mTLS
+  </Step>
+  
+  <Step title="Container Isolation">
+    Run as non-root user, drop capabilities, use read-only filesystem where possible
+  </Step>
+</Steps>
+
+### Encryption
+
+Credentials and secrets are encrypted at rest:
+
+```typescript
+// src/lib/server/encryption.ts
+import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+
+const ALGORITHM = 'aes-256-gcm';
+const KEY_LENGTH = 32;
+const IV_LENGTH = 16;
+const AUTH_TAG_LENGTH = 16;
+
+export function encrypt(plaintext: string, key: Buffer): string {
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  
+  let ciphertext = cipher.update(plaintext, 'utf8', 'hex');
+  ciphertext += cipher.final('hex');
+  
+  const authTag = cipher.getAuthTag();
+  
+  // Format: iv:authTag:ciphertext
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${ciphertext}`;
+}
+
+export function decrypt(encrypted: string, key: Buffer): string {
+  const [ivHex, authTagHex, ciphertext] = encrypted.split(':');
+  
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+  
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+  
+  let plaintext = decipher.update(ciphertext, 'hex', 'utf8');
+  plaintext += decipher.final('utf8');
+  
+  return plaintext;
+}
+```
+
+**Encrypted Fields**:
+- Docker registry passwords
+- Git SSH keys and tokens
+- LDAP bind passwords
+- OIDC client secrets
+- TLS private keys
+- Environment variables marked as secrets
+
+### Session Security
+
+```typescript
+// Session token generation
+function generateSessionToken(): string {
+  const bytes = secureRandomBytes(32);  // 32 bytes = 256 bits
+  return Buffer.from(bytes).toString('hex');  // 64 hex characters
+}
+
+// Session validation
+async function validateSession(token: string): Promise<Session | null> {
+  const session = await getSession(token);
+  
+  if (!session) return null;
+  if (new Date() > new Date(session.expiresAt)) {
+    await deleteSession(session.id);
+    return null;
+  }
+  
+  return session;
+}
+```
+
+### Audit Logging
+
+All privileged actions are logged:
+
+```typescript
+// src/lib/server/audit.ts
+export async function auditContainer(
+  userId: number,
+  action: string,
+  containerId: string,
+  envId: number,
+  details?: object
+) {
+  await createAuditLog({
+    userId,
+    action: `container.${action}`,
+    resourceType: 'container',
+    resourceId: containerId,
+    environmentId: envId,
+    details,
+    timestamp: new Date().toISOString(),
+    success: true
+  });
+}
+```
+
+## Performance Optimizations
+
+### Response Compression
+
+Automatic gzip compression for responses:
+
+```typescript
+// src/hooks.server.ts
+function shouldCompress(request: Request, response: Response): boolean {
+  const acceptEncoding = request.headers.get('accept-encoding') || '';
+  if (!acceptEncoding.includes('gzip')) return false;
+  
+  const contentType = response.headers.get('content-type') || '';
+  const isCompressible = COMPRESSIBLE_TYPES.some(type => 
+    contentType.includes(type)
+  );
+  
+  return isCompressible;
+}
+
+async function compressResponse(response: Response): Promise<Response> {
+  const body = await response.arrayBuffer();
+  const compressed = gzipSync(new Uint8Array(body));
+  
+  const headers = new Headers(response.headers);
+  headers.set('content-encoding', 'gzip');
+  headers.delete('content-length');
+  
+  return new Response(compressed, { headers });
+}
+```
+
+### Database Indexing
+
+Optimized indexes for common queries:
+
+```sql
+CREATE INDEX idx_container_events_env_time 
+  ON container_events(environment_id, timestamp DESC);
+
+CREATE INDEX idx_audit_logs_user_time 
+  ON audit_logs(user_id, timestamp DESC);
+
+CREATE INDEX idx_sessions_token 
+  ON sessions(token);
+```
+
+### Caching Strategy
+
+- **In-memory caching**: Environment list, user permissions
+- **Conditional requests**: ETags for static resources
+- **Stale-while-revalidate**: Background data refresh
+
+## Deployment Architecture
+
+### Single Container Deployment
+
+Simplest deployment with SQLite:
+
+```yaml
+version: '3.8'
+services:
+  dockhand:
+    image: dockhand/dockhand:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand-data:/app/data
+    environment:
+      PUID: 1001
+      PGID: 1001
+
+volumes:
+  dockhand-data:
+```
+
+### PostgreSQL Deployment
+
+For production with external database:
+
+```yaml
+version: '3.8'
+services:
+  dockhand:
+    image: dockhand/dockhand:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DATABASE_URL: postgresql://user:pass@postgres:5432/dockhand
+      PUID: 1001
+      PGID: 1001
+    depends_on:
+      - postgres
+  
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: dockhand
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+
+volumes:
+  postgres-data:
+```
+
+### High Availability
+
+For enterprise deployments:
+
+- **Load balancer**: Nginx/Traefik in front of multiple Dockhand instances
+- **Shared PostgreSQL**: Managed database (RDS, CloudSQL, etc.)
+- **Session affinity**: Sticky sessions for WebSocket connections
+- **Health checks**: `/api/health` endpoint for load balancer
+
+<Info>
+Dockhand is designed to be stateless except for the database, making horizontal scaling straightforward.
+</Info>
+
+## Extension Points
+
+Dockhand provides several extension points for customization.
+
+### Webhooks
+
+Outgoing webhooks for notifications:
+
+```typescript
+interface WebhookPayload {
+  event: string;          // e.g., 'container.started'
+  timestamp: string;
+  environment: { id: number; name: string };
+  resource: object;       // Container, image, stack, etc.
+  user?: { id: number; username: string };
+}
+
+// POST to webhook URL with custom headers
+await fetch(webhookUrl, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Dockhand-Signature': signature,
+    ...customHeaders
+  },
+  body: JSON.stringify(payload)
+});
+```
+
+### MQTT Integration
+
+Publish events to MQTT broker:
+
+```typescript
+import mqtt from 'mqtt';
+
+const client = mqtt.connect(brokerUrl, {
+  username,
+  password,
+  clientId: 'dockhand'
+});
+
+client.publish(
+  `dockhand/${envName}/containers/${containerId}/state`,
+  JSON.stringify({ state: 'running', timestamp: new Date() }),
+  { qos: 1, retain: true }
+);
+```
+
+### Custom Themes
+
+Extend Tailwind configuration:
+
+```typescript
+// src/lib/themes.ts
+export const customTheme = {
+  colors: {
+    primary: { /* ... */ },
+    secondary: { /* ... */ },
+  },
+  borderRadius: { /* ... */ },
+  fontFamily: { /* ... */ }
+};
+```
+
+## Future Architecture Plans
+
+<CardGroup cols={2}>
+  <Card title="Plugin System" icon="puzzle-piece">
+    Extensibility framework for custom integrations and UI components
+  </Card>
+  
+  <Card title="GraphQL API" icon="network-wired">
+    Alternative API layer for complex queries and subscriptions
+  </Card>
+  
+  <Card title="Message Queue" icon="layer-group">
+    Redis/NATS for distributed job processing
+  </Card>
+  
+  <Card title="Kubernetes Support" icon="dharmachakra">
+    Manage Kubernetes clusters alongside Docker
+  </Card>
+</CardGroup>

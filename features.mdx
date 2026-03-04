@@ -1,0 +1,621 @@
+---
+title: Features
+description: Comprehensive guide to all Dockhand features including containers, stacks, images, volumes, networks, and more
+---
+
+## Container Management
+
+Dockhand provides comprehensive container lifecycle management with real-time monitoring and control.
+
+### Container Operations
+
+<Steps>
+  <Step title="List & Filter">
+    View all containers with customizable columns, sorting, and filtering. Toggle between running containers only or include stopped containers.
+  </Step>
+  
+  <Step title="Lifecycle Control">
+    Start, stop, restart, pause, unpause, and remove containers with instant feedback.
+  </Step>
+  
+  <Step title="Monitor & Inspect">
+    Real-time stats (CPU, memory, network, disk I/O), health status, and full container inspection.
+  </Step>
+</Steps>
+
+### Interactive Terminal
+
+Full terminal access to running containers:
+
+```bash
+# Accessed via /api/containers/{id}/terminal WebSocket endpoint
+# Supports:
+- Full TTY with resize support
+- Copy/paste functionality
+- Web link detection and opening
+- Multiple concurrent sessions
+```
+
+Implementation uses xterm.js with addons:
+- `@xterm/addon-fit` for automatic resizing
+- `@xterm/addon-web-links` for clickable URLs
+
+### Real-Time Log Streaming
+
+Stream container logs with advanced features:
+
+- **Live streaming** via Server-Sent Events (SSE)
+- **Search and filter** with regex support
+- **Timestamp display** toggle
+- **Follow mode** for tailing logs
+- **Download logs** as text files
+- **Color-coded output** preservation
+
+<Info>
+Log streaming uses Docker's logs API with the `follow=true` parameter for real-time updates.
+</Info>
+
+### File Browser
+
+Browse and manage container filesystems:
+
+- Navigate directory structures with breadcrumbs
+- Upload files and directories
+- Download files from containers
+- View file metadata (size, permissions, modification time)
+- Bulk operations support
+
+```typescript
+// File browser API endpoint structure
+GET  /api/containers/{id}/files?path=/app
+POST /api/containers/{id}/files/upload
+GET  /api/containers/{id}/files/download?path=/app/config.json
+```
+
+### Container Creation
+
+Create containers with a comprehensive UI:
+
+<CardGroup cols={2}>
+  <Card title="Basic Configuration">
+    Image, name, hostname, network mode
+  </Card>
+  
+  <Card title="Port Mappings">
+    Expose ports with host binding
+  </Card>
+  
+  <Card title="Environment Variables">
+    Set env vars with secret masking
+  </Card>
+  
+  <Card title="Volume Mounts">
+    Bind mounts and named volumes
+  </Card>
+  
+  <Card title="Network Settings">
+    Connect to networks with aliases
+  </Card>
+  
+  <Card title="Resource Limits">
+    CPU, memory, and device constraints
+  </Card>
+  
+  <Card title="Restart Policies">
+    Always, unless-stopped, on-failure
+  </Card>
+  
+  <Card title="Labels & Metadata">
+    Add labels for organization
+  </Card>
+</CardGroup>
+
+### Auto-Updates
+
+Schedule automatic container updates:
+
+- **Cron scheduling** using Croner library
+- **Pre-update notifications** via email, webhook, or MQTT
+- **Update strategies**: recreate or in-place
+- **Rollback support** on failure
+- **Execution history** tracking
+
+```typescript
+// Schedule format examples
+const schedules = [
+  '0 2 * * *',      // Daily at 2 AM
+  '0 0 * * 0',      // Weekly on Sunday
+  '0 0 1 * *'       // Monthly on 1st
+];
+```
+
+<Warning>
+Auto-updates recreate containers by default. Ensure data is persisted in volumes before enabling.
+</Warning>
+
+## Compose Stacks
+
+Manage Docker Compose deployments with visual tools and Git integration.
+
+### Stack Types
+
+<Accordion title="Internal Stacks">
+  Created and edited directly in Dockhand with the visual YAML editor. Stored in `~/.dockhand/stacks/`.
+</Accordion>
+
+<Accordion title="Git Stacks">
+  Deployed from Git repositories with automatic sync on push events. Supports GitHub, GitLab, Gitea, and custom Git servers.
+</Accordion>
+
+<Accordion title="External Stacks">
+  Detected from existing Compose deployments managed outside Dockhand. Read-only monitoring.
+</Accordion>
+
+### Stack Operations
+
+Full Compose lifecycle management:
+
+```typescript
+// All operations use docker compose commands directly
+interface StackOperations {
+  deploy(name: string, compose: string): Promise<Result>;
+  start(name: string): Promise<Result>;
+  stop(name: string): Promise<Result>;
+  restart(name: string): Promise<Result>;
+  down(name: string, removeVolumes: boolean): Promise<Result>;
+  logs(name: string, follow: boolean): Promise<Stream>;
+  pull(name: string): Promise<Result>;
+}
+```
+
+Features:
+- Real-time deployment progress via SSE
+- Service-level control (start/stop individual services)
+- Container health monitoring across services
+- Stack status aggregation (running, partial, stopped)
+
+### Visual Compose Editor
+
+Powerful YAML editor with CodeMirror:
+
+- **Syntax highlighting** with `@codemirror/lang-yaml`
+- **Auto-completion** for Compose schema
+- **Error detection** with inline diagnostics
+- **Search and replace** with regex support
+- **Theme support** (light/dark mode)
+- **Line numbers** and folding
+
+<Tip>
+The editor validates Compose syntax in real-time and highlights common issues before deployment.
+</Tip>
+
+### Git Integration
+
+Deploy stacks from Git repositories:
+
+<Steps>
+  <Step title="Add Git Credential">
+    Store SSH keys or HTTPS tokens with AES-256-GCM encryption
+  </Step>
+  
+  <Step title="Register Repository">
+    Add repository URL, branch, and path to compose.yaml
+  </Step>
+  
+  <Step title="Enable Webhooks">
+    Configure webhook secret for automatic sync on push
+  </Step>
+  
+  <Step title="Deploy Stack">
+    Initial sync and deployment with environment variables
+  </Step>
+</Steps>
+
+**Webhook Endpoint**: `POST /api/git/webhooks/{repositoryId}`
+
+Supported webhook formats:
+- GitHub push events
+- GitLab push events
+- Generic webhooks with commit info
+
+### Environment Variables
+
+Manage stack environment variables:
+
+- **Per-stack configuration** stored in database
+- **Secret masking** in UI for sensitive values
+- **Override Compose defaults** at deployment
+- **Encrypted storage** using AES-256-GCM
+
+```typescript
+// Environment variables are passed to docker compose
+interface StackEnvVar {
+  stackName: string;
+  key: string;
+  value: string;        // Encrypted in database
+  isSecret: boolean;    // Masks value in UI
+}
+```
+
+### Stack Dependency Graphs
+
+Visualize service dependencies with Cytoscape.js:
+
+- Network connections between services
+- Volume sharing relationships
+- Depends_on declarations
+- Interactive node exploration
+
+## Image Management
+
+Comprehensive Docker image operations and security scanning.
+
+### Image Operations
+
+<CardGroup cols={2}>
+  <Card title="Pull Images" icon="download">
+    Pull from registries with progress tracking
+  </Card>
+  
+  <Card title="Tag & Push" icon="upload">
+    Tag images and push to registries
+  </Card>
+  
+  <Card title="Remove Images" icon="trash">
+    Delete unused images with force option
+  </Card>
+  
+  <Card title="Inspect" icon="magnifying-glass">
+    View detailed image metadata and layers
+  </Card>
+</CardGroup>
+
+### Image Scanning
+
+Vulnerability scanning with Trivy and Grype:
+
+```typescript
+// Scanner integration
+interface ScanResult {
+  imageId: string;
+  scanner: 'trivy' | 'grype';
+  scanTime: string;
+  vulnerabilities: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    unknown: number;
+  };
+  findings: VulnerabilityFinding[];
+}
+```
+
+Features:
+- **On-demand scanning** with progress tracking
+- **Scheduled scans** via cron jobs
+- **CVE database** with CVSS scores
+- **Export results** as JSON or CSV
+- **Scan history** tracking
+
+<Note>
+Scanners run as temporary containers and are automatically cleaned up after completion.
+</Note>
+
+### Registry Integration
+
+Manage private Docker registries:
+
+- Add multiple registries with authentication
+- Default registry selection
+- Test connection before saving
+- Encrypted credential storage
+
+```typescript
+interface Registry {
+  id: number;
+  name: string;
+  url: string;
+  username: string;
+  password: string;  // Encrypted
+  isDefault: boolean;
+}
+```
+
+## Volume Management
+
+Manage Docker volumes with usage tracking and browsing.
+
+### Volume Operations
+
+- **Create volumes** with custom drivers and options
+- **Delete volumes** with safety confirmation
+- **Clone volumes** to create backups
+- **Inspect volumes** for detailed metadata
+- **Export volumes** as tar archives
+- **Usage tracking** shows which containers use each volume
+
+### Volume Browser
+
+Browse volume contents using temporary containers:
+
+```typescript
+// Volume browsing creates a temporary container with the volume mounted
+const browseVolume = async (volumeName: string) => {
+  // Creates: dockhand-volume-browser-{sessionId}
+  // Mounts: volumeName to /volume
+  // Provides: File listing and download API
+};
+```
+
+<Tip>
+Volume browsers are automatically cleaned up when the browsing session ends.
+</Tip>
+
+## Network Management
+
+Manage Docker networks with container connectivity.
+
+### Network Operations
+
+<Steps>
+  <Step title="Create Networks">
+    Custom networks with driver selection (bridge, overlay, macvlan)
+  </Step>
+  
+  <Step title="Configure IPAM">
+    Set subnet, gateway, and IP range
+  </Step>
+  
+  <Step title="Connect Containers">
+    Attach containers to networks with aliases
+  </Step>
+  
+  <Step title="Disconnect">
+    Remove containers from networks
+  </Step>
+</Steps>
+
+### Network Inspection
+
+Detailed network information:
+
+- Driver and scope
+- IPAM configuration
+- Connected containers with IP addresses
+- Network options and labels
+
+## Dashboard & Monitoring
+
+Real-time overview of Docker environments.
+
+### Environment Tiles
+
+Each environment displays:
+
+- **Resource counts**: Containers, images, volumes, networks, stacks
+- **Container states**: Running, stopped, paused, unhealthy
+- **Disk usage**: Images, containers, volumes, build cache
+- **Top containers**: By CPU and memory usage
+- **Recent events**: Container lifecycle events
+- **Connection status**: Online/offline indicator
+
+### Metrics Collection
+
+Optional real-time metrics using Go collector:
+
+```go
+// collection-worker binary
+// Collects: CPU, memory, network, disk I/O per container
+// Storage: In-memory with configurable retention
+// API: /api/dashboard/metrics/{envId}
+```
+
+Metrics include:
+- CPU percentage per container
+- Memory usage (with cache separation)
+- Network RX/TX bytes
+- Block I/O read/write
+
+<Info>
+Metrics collection can be disabled per environment to reduce overhead.
+</Info>
+
+### Activity Tracking
+
+Comprehensive event logging:
+
+- Container lifecycle events (start, stop, die, restart)
+- Image events (pull, push, delete, tag)
+- Volume events (create, mount, unmount, remove)
+- Network events (create, connect, disconnect, remove)
+- Stack events (deploy, start, stop, remove)
+
+## Settings & Configuration
+
+Extensive configuration options for customization.
+
+### Environment Settings
+
+Configure Docker hosts:
+
+```typescript
+interface Environment {
+  id: number;
+  name: string;
+  connectionType: 'socket' | 'direct' | 'hawser-standard' | 'hawser-edge';
+  socketPath?: string;       // For local Unix socket
+  host?: string;             // For TCP connections
+  port?: number;             // For TCP connections
+  tls?: boolean;
+  tlsCert?: string;          // PEM format
+  tlsKey?: string;           // PEM format
+  tlsCa?: string;            // PEM format
+  tlsSkipVerify?: boolean;
+  collectActivity: boolean;
+  collectMetrics: boolean;
+  icon: string;              // Lucide icon name
+  labels: string[];          // For filtering
+}
+```
+
+### Authentication Settings
+
+<Accordion title="Local Users">
+  Create users with email and password. Passwords hashed with Argon2id (memory-hard, timing-attack resistant).
+</Accordion>
+
+<Accordion title="OIDC/SSO">
+  Configure OpenID Connect providers (Keycloak, Auth0, Okta, etc.) with client ID, secret, and discovery URL.
+</Accordion>
+
+<Accordion title="LDAP">
+  Integrate with Active Directory or OpenLDAP. Supports user DN patterns, group filters, and TLS.
+</Accordion>
+
+<Accordion title="MFA">
+  Enable TOTP-based MFA with QR code setup. Uses OTPAuth library with 6-digit codes and 30-second window.
+</Accordion>
+
+### Notification Settings
+
+Configure notifications for events:
+
+- **Email**: SMTP with TLS support (using nodemailer)
+- **Webhook**: HTTP POST with custom headers
+- **MQTT**: Publish to topics with QoS support
+
+Event triggers:
+- Container state changes
+- Health check failures
+- Stack deployment results
+- Image scan findings
+- Scheduled task execution
+
+### Preferences
+
+User-level customization:
+
+- **Theme**: Light, dark, or system
+- **Grid columns**: Show/hide columns per view
+- **Dashboard layout**: Drag-and-drop tile arrangement
+- **Date format**: Locale-specific formatting
+- **Refresh intervals**: Auto-refresh timing
+
+## Audit Logging
+
+Comprehensive audit trail for compliance.
+
+### Logged Events
+
+All user actions are logged:
+
+```typescript
+interface AuditLog {
+  id: number;
+  timestamp: string;
+  userId: number;
+  username: string;
+  action: string;           // e.g., 'container.start'
+  resourceType: string;     // e.g., 'container'
+  resourceId: string;
+  environmentId?: number;
+  details?: object;         // Action-specific data
+  ipAddress?: string;
+  userAgent?: string;
+  success: boolean;
+  errorMessage?: string;
+}
+```
+
+### Audit Categories
+
+- **Containers**: Start, stop, create, delete, update
+- **Images**: Pull, push, tag, remove
+- **Volumes**: Create, remove, clone
+- **Networks**: Create, connect, disconnect, remove
+- **Stacks**: Deploy, start, stop, remove
+- **Settings**: Configuration changes
+- **Users**: Login, logout, create, delete, role changes
+- **Environments**: Add, update, delete
+
+<Note>
+Audit logs are stored in the database and can be exported for external SIEM integration.
+</Note>
+
+## Scheduling
+
+Automate tasks with cron-based scheduling using Croner library.
+
+### Scheduled Tasks
+
+- **Container updates**: Automatic pull and recreate
+- **Image scans**: Regular vulnerability scanning
+- **Stack updates**: Git sync and redeploy
+- **Pruning**: Clean up unused resources
+- **Backups**: Volume exports
+
+### Schedule Management
+
+```typescript
+interface Schedule {
+  id: number;
+  name: string;
+  taskType: 'container-update' | 'image-scan' | 'stack-update' | 'prune';
+  cronExpression: string;   // e.g., '0 2 * * *'
+  enabled: boolean;
+  lastExecution?: string;
+  nextExecution?: string;
+  parameters: object;       // Task-specific config
+}
+```
+
+Features:
+- Human-readable cron descriptions (using cronstrue)
+- Execution history with success/failure tracking
+- Manual trigger option
+- Notification on completion
+
+## API & Integration
+
+RESTful API for programmatic access.
+
+### API Structure
+
+All endpoints follow REST conventions:
+
+```
+GET    /api/containers              # List containers
+GET    /api/containers/{id}         # Get container
+POST   /api/containers              # Create container
+PATCH  /api/containers/{id}/start   # Start container
+DELETE /api/containers/{id}         # Remove container
+
+GET    /api/stacks                  # List stacks
+POST   /api/stacks/deploy           # Deploy stack
+POST   /api/stacks/{name}/start     # Start stack
+
+GET    /api/images                  # List images
+POST   /api/images/pull             # Pull image
+POST   /api/images/{id}/scan        # Scan image
+```
+
+### Authentication
+
+API requests use session cookies:
+
+```bash
+# Login first
+curl -X POST https://dockhand.example.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"secret"}' \
+  -c cookies.txt
+
+# Then use cookies for authenticated requests
+curl https://dockhand.example.com/api/containers \
+  -b cookies.txt
+```
+
+<Warning>
+API documentation is under development. Check the source code for detailed endpoint specifications.
+</Warning>

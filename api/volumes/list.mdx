@@ -1,0 +1,194 @@
+---
+title: 'List Volumes'
+description: 'Retrieve all Docker volumes for a specific environment'
+api: 'GET /api/volumes'
+---
+
+## Overview
+
+Returns a list of all Docker volumes in the specified environment. This endpoint requires an environment ID to be provided as a query parameter.
+
+## Authentication
+
+This endpoint requires authentication via cookies. The user must have the `volumes:view` permission for the specified environment.
+
+## Query Parameters
+
+<ParamField query="env" type="integer" required>
+  The environment ID to list volumes from. Required parameter.
+</ParamField>
+
+## Response
+
+<ResponseField name="volumes" type="array">
+  Array of volume objects
+  
+  <Expandable title="Volume Object">
+    <ResponseField name="Name" type="string">
+      Volume name
+    </ResponseField>
+    
+    <ResponseField name="Driver" type="string">
+      Volume driver (local or third-party plugin)
+    </ResponseField>
+    
+    <ResponseField name="Mountpoint" type="string">
+      Mount point on the Docker host filesystem
+    </ResponseField>
+    
+    <ResponseField name="CreatedAt" type="string">
+      ISO 8601 timestamp of volume creation
+    </ResponseField>
+    
+    <ResponseField name="Scope" type="string">
+      Volume scope (local or global)
+    </ResponseField>
+    
+    <ResponseField name="Labels" type="object">
+      User-defined labels (key-value pairs)
+    </ResponseField>
+    
+    <ResponseField name="Options" type="object">
+      Volume driver options (key-value pairs)
+    </ResponseField>
+    
+    <ResponseField name="UsageData" type="object">
+      Volume usage statistics (if available)
+      
+      <Expandable title="Usage Data">
+        <ResponseField name="Size" type="integer">
+          Volume size in bytes
+        </ResponseField>
+        
+        <ResponseField name="RefCount" type="integer">
+          Number of containers using this volume
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error Responses
+
+<ResponseExample>
+```json 403 Permission Denied
+{
+  "error": "Permission denied"
+}
+```
+
+```json 403 Environment Access Denied
+{
+  "error": "Access denied to this environment"
+}
+```
+
+```json 404 Environment Not Found
+{
+  "error": "Environment not found"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Failed to list volumes"
+}
+```
+</ResponseExample>
+
+<RequestExample>
+```bash cURL
+curl -X GET 'https://your-dockhand.com/api/volumes?env=1' \
+  -H 'Cookie: session=your-session-cookie'
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-dockhand.com/api/volumes?env=1', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const volumes = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://your-dockhand.com/api/volumes',
+    params={'env': 1},
+    cookies={'session': 'your-session-cookie'}
+)
+
+volumes = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+[
+  {
+    "Name": "postgres-data",
+    "Driver": "local",
+    "Mountpoint": "/var/lib/docker/volumes/postgres-data/_data",
+    "CreatedAt": "2024-01-15T10:30:00Z",
+    "Scope": "local",
+    "Labels": {
+      "app": "database",
+      "environment": "production"
+    },
+    "Options": {},
+    "UsageData": {
+      "Size": 5368709120,
+      "RefCount": 1
+    }
+  },
+  {
+    "Name": "shared-storage",
+    "Driver": "local",
+    "Mountpoint": "/var/lib/docker/volumes/shared-storage/_data",
+    "CreatedAt": "2024-01-20T14:22:00Z",
+    "Scope": "local",
+    "Labels": {
+      "app": "file-server",
+      "tier": "storage"
+    },
+    "Options": {
+      "type": "nfs",
+      "device": ":/data/shared",
+      "o": "addr=192.168.1.100,rw,nfsvers=4"
+    },
+    "UsageData": {
+      "Size": 10737418240,
+      "RefCount": 3
+    }
+  },
+  {
+    "Name": "temp-cache",
+    "Driver": "local",
+    "Mountpoint": "/var/lib/docker/volumes/temp-cache/_data",
+    "CreatedAt": "2024-02-01T09:15:00Z",
+    "Scope": "local",
+    "Labels": {},
+    "Options": {
+      "type": "tmpfs",
+      "device": "tmpfs",
+      "o": "size=1G,mode=1777"
+    },
+    "UsageData": {
+      "Size": 524288000,
+      "RefCount": 1
+    }
+  }
+]
+```
+</ResponseExample>
+
+## Notes
+
+- Returns an empty array if no environment ID is provided
+- Volume data is retrieved directly from the Docker API
+- Requires authentication to be enabled and the user to have proper permissions
+- Enterprise users must have access to the specified environment
+- `UsageData` may not be available for all volume drivers
+- Volumes created by Docker Compose will include stack labels

@@ -1,0 +1,266 @@
+---
+title: Container Statistics
+description: Get real-time resource usage statistics for containers
+---
+
+## Get Container Stats
+
+<RequestExample>
+```bash
+GET /api/containers/{id}/stats?env=1
+```
+</RequestExample>
+
+Retrieves a single snapshot of resource usage statistics for a specific container, including CPU, memory, network, and block I/O metrics.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+<ResponseField name="cpuPercent" type="number">
+  CPU usage percentage (0-100 per core, can exceed 100 on multi-core systems)
+</ResponseField>
+
+<ResponseField name="memoryUsage" type="number">
+  Actual memory usage in bytes (excluding cache). This is calculated by subtracting inactive file cache from total usage, matching Docker CLI behavior.
+</ResponseField>
+
+<ResponseField name="memoryRaw" type="number">
+  Raw memory usage in bytes (including cache)
+</ResponseField>
+
+<ResponseField name="memoryCache" type="number">
+  File cache size in bytes that was subtracted from raw usage
+</ResponseField>
+
+<ResponseField name="memoryLimit" type="number">
+  Memory limit in bytes configured for the container
+</ResponseField>
+
+<ResponseField name="memoryPercent" type="number">
+  Memory usage as a percentage of the limit (0-100)
+</ResponseField>
+
+<ResponseField name="networkRx" type="number">
+  Total network bytes received across all interfaces
+</ResponseField>
+
+<ResponseField name="networkTx" type="number">
+  Total network bytes transmitted across all interfaces
+</ResponseField>
+
+<ResponseField name="blockRead" type="number">
+  Total bytes read from block devices
+</ResponseField>
+
+<ResponseField name="blockWrite" type="number">
+  Total bytes written to block devices
+</ResponseField>
+
+<ResponseField name="timestamp" type="number">
+  Unix timestamp in milliseconds when the stats were collected
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Success
+- `403` - Permission denied
+- `404` - Container not found or environment not found
+- `500` - Failed to get stats
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X GET "https://your-dockhand.com/api/containers/abc123def456/stats?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/stats?env=1`, {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const stats = await response.json();
+console.log(`CPU: ${stats.cpuPercent}%`);
+console.log(`Memory: ${(stats.memoryUsage / 1024 / 1024).toFixed(2)} MB`);
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "cpuPercent": 12.45,
+  "memoryUsage": 52428800,
+  "memoryRaw": 58720256,
+  "memoryCache": 6291456,
+  "memoryLimit": 2147483648,
+  "memoryPercent": 2.44,
+  "networkRx": 1048576,
+  "networkTx": 524288,
+  "blockRead": 4194304,
+  "blockWrite": 2097152,
+  "timestamp": 1705320600000
+}
+```
+
+## Stream All Container Stats
+
+<RequestExample>
+```bash
+GET /api/containers/stats/stream?env=1
+```
+</RequestExample>
+
+Streams resource statistics for all running containers in an environment using Server-Sent Events (SSE). This endpoint collects stats for all containers once and closes the connection.
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID to monitor
+</ParamField>
+
+### Response Format
+
+The endpoint returns a Server-Sent Events (SSE) stream with the following event types:
+
+**Event: `stat`**
+
+Emitted for each running container with its statistics.
+
+<ResponseField name="id" type="string">
+  Container ID
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Container name
+</ResponseField>
+
+<ResponseField name="cpuPercent" type="number">
+  CPU usage percentage
+</ResponseField>
+
+<ResponseField name="memoryUsage" type="number">
+  Actual memory usage in bytes (excluding cache)
+</ResponseField>
+
+<ResponseField name="memoryRaw" type="number">
+  Raw memory usage in bytes (including cache)
+</ResponseField>
+
+<ResponseField name="memoryCache" type="number">
+  File cache size in bytes
+</ResponseField>
+
+<ResponseField name="memoryLimit" type="number">
+  Memory limit in bytes
+</ResponseField>
+
+<ResponseField name="memoryPercent" type="number">
+  Memory usage percentage
+</ResponseField>
+
+<ResponseField name="networkRx" type="number">
+  Network bytes received
+</ResponseField>
+
+<ResponseField name="networkTx" type="number">
+  Network bytes transmitted
+</ResponseField>
+
+<ResponseField name="blockRead" type="number">
+  Block device bytes read
+</ResponseField>
+
+<ResponseField name="blockWrite" type="number">
+  Block device bytes written
+</ResponseField>
+
+**Event: `done`**
+
+Emitted when all container stats have been collected and the stream is ending.
+
+**Event: `error`**
+
+Emitted if an error occurs during stats collection.
+
+<ResponseField name="error" type="string">
+  Error message
+</ResponseField>
+
+### Error Responses
+
+**Status Codes:**
+- `200` - SSE stream established
+- `403` - Permission denied
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X GET "https://your-dockhand.com/api/containers/stats/stream?env=1" \
+  -H "Cookie: session=your-session-cookie" \
+  -H "Accept: text/event-stream"
+```
+
+```javascript JavaScript
+const eventSource = new EventSource('/api/containers/stats/stream?env=1');
+
+eventSource.addEventListener('stat', (event) => {
+  const stat = JSON.parse(event.data);
+  console.log(`${stat.name}: CPU ${stat.cpuPercent}%, Memory ${stat.memoryPercent}%`);
+});
+
+eventSource.addEventListener('done', () => {
+  console.log('Stats collection complete');
+  eventSource.close();
+});
+
+eventSource.addEventListener('error', (event) => {
+  const error = JSON.parse(event.data);
+  console.error('Error:', error.error);
+  eventSource.close();
+});
+```
+</CodeGroup>
+
+### Response Example
+
+```
+event: stat
+data: {"id":"abc123","name":"my-nginx","cpuPercent":5.23,"memoryUsage":52428800,"memoryRaw":58720256,"memoryCache":6291456,"memoryLimit":2147483648,"memoryPercent":2.44,"networkRx":1048576,"networkTx":524288,"blockRead":4194304,"blockWrite":2097152}
+
+event: stat
+data: {"id":"def456","name":"postgres","cpuPercent":15.67,"memoryUsage":209715200,"memoryRaw":220200960,"memoryCache":10485760,"memoryLimit":4294967296,"memoryPercent":4.88,"networkRx":2097152,"networkTx":1048576,"blockRead":8388608,"blockWrite":4194304}
+
+event: done
+data: {}
+
+```
+
+### Notes
+
+- The stream automatically closes after collecting stats for all containers once
+- Only running containers are included in the stats collection
+- Keepalive comments are sent every 5 seconds to maintain the connection
+- Individual container stats collection has an 8-second timeout
+- The overall container list fetch has a 10-second timeout
+- Failed containers are silently skipped

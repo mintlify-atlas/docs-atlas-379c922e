@@ -1,0 +1,467 @@
+---
+title: 'Stacks'
+description: 'Deploy and manage Docker Compose applications with Git integration and real-time monitoring'
+icon: 'layers'
+---
+
+## Overview
+
+The Stacks page provides comprehensive management of Docker Compose applications (stacks). It combines local compose file management with powerful Git integration, allowing you to deploy, monitor, and control multi-container applications with ease.
+
+## Key Features
+
+### Stack Management
+
+- **Docker Compose Support**: Full support for Docker Compose v2+ specifications
+- **Git Integration**: Deploy stacks directly from Git repositories
+- **Stack Sources**: Internal (database-stored), Git-based, or external (file-based)
+- **Real-Time Status**: Live updates for all containers within a stack
+- **Aggregate Metrics**: Combined CPU, memory, and network statistics for all stack containers
+
+### Stack Operations
+
+**Lifecycle Management**:
+- **Start**: Start all stopped containers in a stack
+- **Stop**: Stop all running containers without removing them
+- **Restart**: Restart all containers in a stack
+- **Down**: Stop and remove all containers, networks, and volumes
+- **Deploy**: Deploy or redeploy from Git repository
+
+**Bulk Operations**:
+- Select multiple stacks for batch operations
+- Bulk start, stop, restart, or remove stacks
+- Execute operations in parallel for faster processing
+
+### Git Integration Features
+
+**Repository Management**:
+- Store multiple Git repositories with credentials
+- Support for public and private repositories
+- SSH and HTTPS authentication
+- Branch selection and automatic updates
+
+**Stack Deployment**:
+- Deploy from compose files in Git repositories
+- Configure compose file path (default: `compose.yaml`)
+- Environment variables stored separately from Git
+- Automatic webhook support for CI/CD pipelines
+
+**Auto-Update**:
+- Schedule automatic pulls from Git
+- Daily, weekly, or custom cron expressions
+- Manual trigger for immediate updates
+- Webhook integration for push-based updates
+
+### Stack Types
+
+**Internal Stacks**:
+- Compose files stored in Dockhand database
+- Inline YAML editor with syntax highlighting
+- Environment variable management
+- Easy editing and version control
+
+**Git Stacks**:
+- Linked to Git repositories
+- Automatic synchronization
+- Supports multi-file compose setups
+- Environment variable overrides
+
+**External Stacks**:
+- Detected from compose files on disk
+- File path stored for future operations
+- Can be "adopted" to convert to internal stack
+
+### Container Details View
+
+Expand stacks to see all containers:
+- Container name and status
+- Image name and tag
+- Health check status
+- Uptime and resource usage
+- IP address and ports
+- Network and volume information
+
+**Per-Container Actions**:
+- Start/stop individual containers
+- Restart or pause containers
+- View logs for specific container
+- Open terminal session
+- Inspect container details
+- Browse container filesystem
+
+### Filtering and Search
+
+- **Text Search**: Filter by stack name or status
+- **Status Filter**: Running, partial, stopped, created, not deployed
+- **Multi-Status Selection**: Combine multiple status filters
+- **Driver Filter**: Filter by network driver type
+- **Persistent Filters**: Saved to local storage
+
+### UI Features
+
+**Expandable Rows**:
+- Click stack name to expand/collapse
+- Shows all containers with details
+- Sparkline graphs for resource trends
+- Per-container action buttons
+
+**Status Indicators**:
+- **Running**: All containers running (green)
+- **Partial**: Some containers running (amber)
+- **Stopped**: All containers stopped (red)
+- **Created**: Stack created but not deployed (gray)
+- **Not Deployed**: Git stack not yet deployed (violet)
+
+**Layout Modes**:
+- Horizontal: Logs panel at bottom
+- Vertical: Logs panel on right side
+- Resizable panel widths
+- Persistent layout preference
+
+## How to Use
+
+### Creating an Internal Stack
+
+1. Click the **Create** button
+2. **Configure Stack**:
+   - Enter a unique stack name
+   - Paste or write your Docker Compose YAML
+   - Add environment variables (optional)
+3. **Validation**:
+   - YAML syntax is validated automatically
+   - Errors are highlighted inline
+4. Click **Create** to save and deploy
+5. Stack deploys automatically after creation
+
+### Deploying from Git
+
+1. Click **From Git** button
+2. **Select or Add Repository**:
+   - Choose existing repository
+   - Or add new repository with URL and credentials
+3. **Configure Deployment**:
+   - Enter stack name
+   - Select branch (default: main)
+   - Set compose file path (default: compose.yaml)
+   - Add environment variables
+4. **Advanced Options**:
+   - Enable auto-update with schedule
+   - Configure webhook for push-based deployment
+5. Click **Deploy** to start deployment
+6. Monitor progress in real-time
+
+### Adopting an External Stack
+
+1. Click **Adopt** button
+2. External stacks are listed (detected from compose files)
+3. Select stack to adopt
+4. Review compose file content
+5. Click **Adopt** to convert to internal stack
+6. Stack is now editable in Dockhand
+
+### Managing Stack Lifecycle
+
+**Starting a Stack**:
+1. Find stopped stack in the list
+2. Click the **Start** button or select and use bulk action
+3. All containers start in dependency order
+4. Status updates to "Running" or "Partial"
+
+**Stopping a Stack**:
+1. Find running stack
+2. Click **Stop** button
+3. Confirmation dialog appears
+4. Containers stop gracefully (10s timeout, then force kill)
+
+**Bringing Down a Stack**:
+1. Click **Down** button (⬇️ icon)
+2. Confirm destructive action
+3. Containers, networks, and anonymous volumes are removed
+4. Named volumes are preserved
+
+### Editing Stacks
+
+**Internal Stacks**:
+1. Click the stack name
+2. YAML editor opens with current compose file
+3. Make changes and click **Save**
+4. Stack automatically redeploys with new configuration
+
+**Git Stacks**:
+1. Click the Git icon to open Git stack modal
+2. View repository, branch, and compose path
+3. Change branch or compose path if needed
+4. Update environment variables
+5. Click **Redeploy** to pull latest changes
+
+### Viewing Logs
+
+**All Stack Logs**:
+1. Click **Logs** icon on stack row
+2. Navigates to Logs page with all stack containers pre-selected
+3. Logs are interleaved by timestamp
+4. Stack name shown in filter
+
+**Individual Container Logs**:
+1. Expand stack to show containers
+2. Click **Logs** icon on specific container
+3. Logs panel opens at bottom (or side)
+4. Real-time streaming with search
+
+### Managing Environment Variables
+
+1. Open stack for editing
+2. Click **Environment Variables** tab
+3. Add variables:
+   - Key=Value pairs
+   - Supports multiline values
+   - Auto-complete for common variables
+4. Variables are encrypted in database
+5. Variables override .env files from Git
+
+## UI Walkthrough
+
+### Header Section
+
+- **Title**: "Compose stacks" with total count
+- **Expand/Collapse All**: Toggle all stacks at once
+- **Search Bar**: Filter stacks by name or status
+- **Status Filter**: Multi-select for stack states
+- **Refresh**: Manually refresh stack list
+- **Layout Toggle**: Switch between horizontal/vertical
+- **From Git**: Deploy stack from Git repository
+- **Create**: Create new internal stack
+- **Adopt**: Convert external stack to internal
+
+### Selection Bar
+
+Appears when stacks are selected:
+- Number of selected stacks
+- **Clear**: Deselect all stacks
+- **Start**: Start selected stopped stacks
+- **Restart**: Restart selected running stacks
+- **Stop**: Stop selected running stacks
+- **Down**: Remove selected stacks
+- **Remove**: Delete selected stack definitions
+
+### Stack Table
+
+**Columns**:
+- **Checkbox**: Select for bulk operations
+- **Expand**: Arrow icon to show/hide containers
+- **Name**: Stack name (clickable for internal stacks)
+- **Status**: Running/Partial/Stopped/Not deployed
+- **Containers**: Number of containers in stack
+- **Source**: Internal/Git/External badge
+- **Environment Variables**: Count badge (if any)
+- **CPU**: Aggregate CPU usage
+- **Memory**: Total memory usage
+- **Networks**: Number of unique networks
+- **Volumes**: Total volume count
+- **Actions**: Quick action buttons
+
+**Action Icons**:
+- **Git**: Open Git stack configuration (Git stacks only)
+- **Edit**: Edit compose file (Internal stacks only)
+- **Start/Stop**: Control stack lifecycle
+- **Restart**: Restart all containers
+- **Down**: Stop and remove stack
+- **Logs**: View aggregated logs
+- **Remove**: Delete stack definition
+
+### Expanded Container View
+
+**Container Columns**:
+- **Name**: Container name
+- **Image**: Image name and tag
+- **Status**: Running/Stopped/Paused/Exited
+- **Health**: Health check status with icon
+- **Uptime**: Time since container started
+- **IP**: Container IP address
+- **Ports**: Published ports (clickable)
+- **CPU/Memory**: Resource usage with sparklines
+- **Network**: Rx/Tx with trend graph
+- **Disk**: Read/Write with trend graph
+- **Actions**: Per-container controls
+
+## Real Examples
+
+### Example: WordPress Stack
+
+```yaml
+version: '3.8'
+
+services:
+  wordpress:
+    image: wordpress:latest
+    ports:
+      - 8080:80
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: ${DB_USER}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD}
+      WORDPRESS_DB_NAME: ${DB_NAME}
+    volumes:
+      - wordpress-data:/var/www/html
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  wordpress-data:
+  db-data:
+```
+
+**Environment Variables**:
+```
+DB_USER=wpuser
+DB_PASSWORD=secret123
+DB_NAME=wordpress
+DB_ROOT_PASSWORD=rootsecret
+```
+
+### Example: Microservices Stack
+
+```yaml
+version: '3.8'
+
+services:
+  frontend:
+    image: myapp/frontend:${VERSION}
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - frontend-net
+    restart: unless-stopped
+
+  api:
+    image: myapp/api:${VERSION}
+    ports:
+      - 3000:3000
+    environment:
+      DATABASE_URL: postgresql://db:5432/myapp
+      REDIS_URL: redis://redis:6379
+    networks:
+      - frontend-net
+      - backend-net
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: myapp
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - backend-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - backend-net
+    restart: unless-stopped
+
+networks:
+  frontend-net:
+  backend-net:
+
+volumes:
+  db-data:
+```
+
+### Example: Git Repository Structure
+
+```
+my-app-repo/
+├── compose.yaml          # Main compose file
+├── .env.example          # Example environment variables
+├── README.md
+├── app/
+│   ├── Dockerfile
+│   └── src/
+└── nginx/
+    ├── Dockerfile
+    └── nginx.conf
+```
+
+**Git Stack Configuration**:
+- Repository URL: `https://github.com/myorg/my-app.git`
+- Branch: `main`
+- Compose Path: `compose.yaml`
+- Auto-Update: Daily at 3:00 AM
+- Webhook: Enabled with secret token
+
+## Database Schema
+
+**compose_stacks** (Internal stacks):
+- Stack name and environment ID
+- Compose file content (YAML)
+- Source type: internal, external, git
+- Compose file path (for external)
+- Repository and branch info (for Git)
+- Created and updated timestamps
+
+**stack_environment_variables**:
+- Stack-specific environment variables
+- Encrypted values
+- Overrides for Git-based stacks
+
+**git_repositories**:
+- Repository URL and credentials
+- Branch and compose file path
+- Auto-update schedule and cron expression
+- Webhook configuration
+
+**git_stacks**:
+- Links stacks to Git repositories
+- Deploy status and last deployment time
+- Error messages from failed deployments
+
+## Technical Details
+
+### Compose File Processing
+
+- **YAML Parsing**: Uses js-yaml for syntax validation
+- **Variable Substitution**: Environment variables expanded at runtime
+- **Multi-File Support**: Supports compose file inheritance
+- **Validation**: Pre-deployment validation of compose syntax
+
+### Git Operations
+
+- **Clone**: Shallow clone for faster deployment
+- **Pull**: Fetch latest changes from branch
+- **Authentication**: SSH keys or HTTPS credentials
+- **Webhooks**: GitHub, GitLab, Bitbucket compatible
+
+### API Endpoints
+
+- `GET /api/stacks` - List all stacks
+- `POST /api/stacks` - Create internal stack
+- `GET /api/stacks/sources` - Get stack sources
+- `GET /api/stacks/:name` - Get stack details
+- `PUT /api/stacks/:name` - Update stack
+- `DELETE /api/stacks/:name` - Remove stack
+- `POST /api/stacks/:name/start` - Start stack
+- `POST /api/stacks/:name/stop` - Stop stack
+- `POST /api/stacks/:name/restart` - Restart stack
+- `POST /api/stacks/:name/down` - Bring down stack
+- `GET /api/git/stacks` - List Git stacks
+- `POST /api/git/stacks/deploy` - Deploy Git stack
+- `POST /api/git/stacks/:name/redeploy` - Redeploy Git stack

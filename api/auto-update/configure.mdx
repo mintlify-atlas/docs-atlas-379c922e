@@ -1,0 +1,321 @@
+---
+title: Configure Auto-Update
+api: POST /api/auto-update/{containerName}
+---
+
+Configures automated update settings for a container, including scheduling and vulnerability-based update policies.
+
+## Overview
+
+This endpoint allows you to configure how and when containers are automatically updated. You can:
+
+- Set update schedules using cron expressions
+- Define vulnerability criteria to block unsafe updates
+- Enable or disable auto-updates per container
+
+## Path Parameters
+
+<ParamField path="containerName" type="string" required>
+  Name of the container to configure (URL-encoded if contains special characters)
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="env" type="number">
+  Environment ID. Omit for default environment.
+</ParamField>
+
+## Request Body
+
+<ParamField body="enabled" type="boolean" required>
+  Enable or disable auto-updates. Setting to `false` deletes the configuration.
+</ParamField>
+
+<ParamField body="cronExpression" type="string" required>
+  Cron expression for update schedule. Uses standard 5-field format.
+  
+  Example: `"0 3 * * *"` (daily at 3 AM)
+</ParamField>
+
+<ParamField body="vulnerabilityCriteria" type="string" default="never">
+  Policy for blocking updates based on vulnerability scan results:
+  
+  <Expandable title="Criteria Options">
+    - `never` - Always update regardless of vulnerabilities (default)
+    - `any` - Block if new image has any vulnerabilities
+    - `critical_high` - Block if critical or high severity vulnerabilities found
+    - `critical` - Block only on critical severity vulnerabilities
+    - `more_than_current` - Block if new image has more vulnerabilities than current
+  </Expandable>
+  
+  <Note>
+    Requires vulnerability scanning to be enabled for the environment. If scanning is disabled, this setting is ignored.
+  </Note>
+</ParamField>
+
+<ParamField body="scheduleType" type="string">
+  Optional schedule type hint. Auto-detected from `cronExpression` if omitted.
+  - `daily` - Runs once per day
+  - `weekly` - Runs once per week
+  - `custom` - Custom cron schedule
+</ParamField>
+
+## Vulnerability Criteria Details
+
+### How Vulnerability Blocking Works
+
+ When auto-update runs:
+
+1. Checks if new image version is available
+2. If scanning enabled, scans the new image
+3. Evaluates scan results against configured criteria
+4. Blocks or proceeds with update based on criteria
+
+### Criteria Behavior
+
+<AccordionGroup>
+  <Accordion title="never">
+    Updates are never blocked based on vulnerabilities. This is the default and most permissive setting.
+    
+    **Use when:** You want updates to always proceed, relying on other security measures.
+  </Accordion>
+  
+  <Accordion title="any">
+    Blocks updates if the new image contains any vulnerabilities at any severity level.
+    
+    **Use when:** You have a zero-tolerance policy for vulnerabilities.
+    
+    **Example:** New image has 1 low severity vulnerability → Update blocked
+  </Accordion>
+  
+  <Accordion title="critical_high">
+    Blocks updates only if critical or high severity vulnerabilities are found.
+    
+    **Use when:** You want to prevent serious vulnerabilities while accepting minor risks.
+    
+    **Example:** New image has 5 medium vulnerabilities → Update proceeds  
+    **Example:** New image has 1 critical vulnerability → Update blocked
+  </Accordion>
+  
+  <Accordion title="critical">
+    Blocks updates only if critical severity vulnerabilities are found.
+    
+    **Use when:** You want to balance security with update frequency.
+    
+    **Example:** New image has 2 high vulnerabilities → Update proceeds  
+    **Example:** New image has 1 critical vulnerability → Update blocked
+  </Accordion>
+  
+  <Accordion title="more_than_current">
+    Blocks updates if the new image has more total vulnerabilities than the currently running image.
+    
+    **Use when:** You want to ensure security posture never degrades.
+    
+    **Example:** Current: 5 vulns, New: 3 vulns → Update proceeds  
+    **Example:** Current: 5 vulns, New: 7 vulns → Update blocked
+    
+    <Note>
+      If current image has no scan data, update proceeds regardless.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+## Cron Expression Format
+
+Schedules use standard 5-field cron format:
+
+```
+minute hour day month weekday
+```
+
+### Field Ranges
+
+| Field | Values | Special |
+|-------|--------|--------|
+| minute | 0-59 | `*` = every minute |
+| hour | 0-23 | `*/n` = every n hours |
+| day | 1-31 | Day of month |
+| month | 1-12 | `*` = every month |
+| weekday | 0-7 | 0 or 7 = Sunday |
+
+### Example Schedules
+
+<CodeGroup>
+```text Daily at 3 AM
+0 3 * * *
+```
+
+```text Every Monday at midnight
+0 0 * * 1
+```
+
+```text Every 6 hours
+0 */6 * * *
+```
+
+```text Weekdays at 2 AM
+0 2 * * 1-5
+```
+
+```text First of month at 1 AM
+0 1 1 * *
+```
+</CodeGroup>
+
+## Response
+
+<ResponseField name="id" type="number">
+  Auto-update configuration ID
+</ResponseField>
+
+<ResponseField name="containerName" type="string">
+  Container name
+</ResponseField>
+
+<ResponseField name="environmentId" type="number | null">
+  Associated environment ID
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean">
+  Whether auto-update is enabled
+</ResponseField>
+
+<ResponseField name="scheduleType" type="string">
+  Detected schedule type
+</ResponseField>
+
+<ResponseField name="cronExpression" type="string">
+  Cron expression for schedule
+</ResponseField>
+
+<ResponseField name="vulnerabilityCriteria" type="string">
+  Active vulnerability criteria
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+## Examples
+
+<RequestExample>
+```bash Daily updates (allow critical/high)
+curl -X POST "https://dockhand.example.com/api/auto-update/postgres?env=1" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "cronExpression": "0 3 * * *",
+    "vulnerabilityCriteria": "critical_high"
+  }'
+```
+
+```bash Weekly updates (block any vulnerabilities)
+curl -X POST "https://dockhand.example.com/api/auto-update/redis" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "cronExpression": "0 2 * * 1",
+    "vulnerabilityCriteria": "any"
+  }'
+```
+
+```bash Disable auto-update
+curl -X POST "https://dockhand.example.com/api/auto-update/nginx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+```
+
+```javascript JavaScript
+// Configure with vulnerability blocking
+const response = await fetch(
+  'https://dockhand.example.com/api/auto-update/app?env=1',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      enabled: true,
+      cronExpression: '0 4 * * *',
+      vulnerabilityCriteria: 'critical'
+    })
+  }
+);
+
+const config = await response.json();
+console.log(`Auto-update configured for ${config.containerName}`);
+```
+
+```python Python
+import requests
+
+# Configure strict vulnerability policy
+response = requests.post(
+    'https://dockhand.example.com/api/auto-update/backend',
+    params={'env': 1},
+    json={
+        'enabled': True,
+        'cronExpression': '0 3 * * *',
+        'vulnerabilityCriteria': 'any'
+    }
+)
+
+if response.ok:
+    config = response.json()
+    print(f"Configured: {config['containerName']}")
+    print(f"Schedule: {config['cronExpression']}")
+    print(f"Criteria: {config['vulnerabilityCriteria']}")
+```
+</RequestExample>
+
+<ResponseExample>
+```json Success - Configured
+{
+  "id": 5,
+  "containerName": "postgres",
+  "environmentId": 1,
+  "enabled": true,
+  "scheduleType": "daily",
+  "cronExpression": "0 3 * * *",
+  "vulnerabilityCriteria": "critical_high",
+  "createdAt": "2026-03-04T10:30:00.000Z",
+  "updatedAt": "2026-03-04T10:30:00.000Z"
+}
+```
+
+```json Success - Disabled
+{
+  "success": true,
+  "deleted": true
+}
+```
+
+```json Error - Invalid Cron
+{
+  "error": "Invalid cron expression"
+}
+```
+</ResponseExample>
+
+## Important Notes
+
+<Warning>
+  **Disabling auto-update:** Setting `enabled: false` permanently deletes the configuration. Re-enabling requires creating a new configuration.
+</Warning>
+
+<Info>
+  **Vulnerability scanning:** The `vulnerabilityCriteria` setting only takes effect if vulnerability scanning is enabled for the environment. Check environment scanner settings.
+</Info>
+
+<Tip>
+  **Testing schedules:** Monitor the schedules list to verify your configuration is active.
+</Tip>
+
+## Related Endpoints
+
+- [List Schedules](/api/schedules/list) - View all configured schedules
+- [Create Schedule](/api/schedules/create) - Create additional schedules

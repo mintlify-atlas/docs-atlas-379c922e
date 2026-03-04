@@ -1,0 +1,353 @@
+---
+title: 'Push Image'
+description: 'Upload Docker images to container registries with authentication'
+icon: 'upload'
+---
+
+## Overview
+
+Push Docker images to configured container registries. Supports Docker Hub, private registries, and custom registry configurations with automatic tag management and authentication handling.
+
+## Endpoint
+
+```bash
+POST /api/images/push?env={environmentId}
+```
+
+## Query Parameters
+
+<ParamField query="env" type="integer">
+  Environment ID containing the image to push. Optional for local environments.
+</ParamField>
+
+## Request Body
+
+<ParamField body="imageId" type="string" required>
+  Image ID (SHA256 hash) to push
+</ParamField>
+
+<ParamField body="imageName" type="string">
+  Current image name/tag (used for audit logging)
+</ParamField>
+
+<ParamField body="registryId" type="integer" required>
+  Registry ID where the image will be pushed. Must be a configured registry.
+</ParamField>
+
+<ParamField body="newTag" type="string">
+  Custom tag for the pushed image. If not provided, uses the image's existing tag.
+  Format: `repository/name:tag` or `name:tag`
+</ParamField>
+
+## Authentication
+
+Requires `images:push` permission for the specified environment.
+
+### Registry Authentication
+
+Registry credentials are retrieved from the database and sent to Docker API:
+
+```typescript:src/routes/api/images/push/+server.ts
+const authConfig = registry.username && registry.password
+  ? {
+      username: registry.username,
+      password: registry.password,
+      serveraddress: authServerAddress
+    }
+  : {
+      serveraddress: authServerAddress
+    };
+```
+
+## Response Format
+
+### Async Response (default)
+
+Returns job ID for progress tracking:
+
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Sync Response (with `Accept: application/json`)
+
+Returns final result immediately:
+
+```json
+{
+  "status": "complete",
+  "message": "Image pushed to registry.example.com/app:v1.0",
+  "targetTag": "registry.example.com/app:v1.0"
+}
+```
+
+## Progress Events
+
+### Tagging
+
+```json
+{
+  "status": "tagging",
+  "message": "Tagging image..."
+}
+```
+
+### Pushing
+
+```json
+{
+  "status": "pushing",
+  "message": "Pushing to registry..."
+}
+```
+
+### Layer Progress
+
+```json
+{
+  "id": "abc123",
+  "status": "Pushing",
+  "progressDetail": {
+    "current": 1048576,
+    "total": 10485760
+  },
+  "progress": "[====>     ] 1MB/10MB"
+}
+```
+
+### Complete
+
+```json
+{
+  "status": "complete",
+  "message": "Image pushed to registry.example.com/app:v1.0",
+  "targetTag": "registry.example.com/app:v1.0"
+}
+```
+
+### Error
+
+```json
+{
+  "status": "error",
+  "error": "Authentication failed. Check registry credentials."
+}
+```
+
+## Error Responses
+
+<ResponseField name="400" type="object">
+  Invalid request - missing required fields
+  ```json
+  { "error": "Image ID and registry ID are required" }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="object">
+  Image has no tag
+  ```json
+  { "error": "Image has no tag. Please provide a tag name." }
+  ```
+</ResponseField>
+
+<ResponseField name="403" type="object">
+  Permission denied
+  ```json
+  { "error": "Permission denied" }
+  ```
+</ResponseField>
+
+<ResponseField name="404" type="object">
+  Registry not found
+  ```json
+  { "error": "Registry not found" }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="object">
+  Push failed - authentication or network error
+  ```json
+  {
+    "status": "error",
+    "error": "TLS/HTTPS error. If your registry uses HTTP, add it to Docker's insecure-registries in /etc/docker/daemon.json"
+  }
+  ```
+</ResponseField>
+
+## Tag Management
+
+The push endpoint automatically handles tag formatting for different registry types:
+
+### Docker Hub
+
+Docker Hub images don't require host prefix:
+
+```typescript:src/routes/api/images/push/+server.ts
+const isDockerHub = registryHost.includes('docker.io') ||
+  registryHost.includes('hub.docker.com') ||
+  registryHost.includes('registry.hub.docker.com') ||
+  registryHost.includes('index.docker.io');
+
+// Docker Hub: username/image:tag
+// Other registries: registry.example.com/org/image:tag
+const targetTag = isDockerHub ? targetImageName : `${fullRegistry}/${targetImageName}`;
+```
+
+### Private Registries
+
+Private registry pushes include the full host path:
+
+```
+registry.company.com:5000/project/app:v1.0
+```
+
+### Registry Prefix Removal
+
+Existing registry prefixes are stripped before applying new target:
+
+```typescript:src/routes/api/images/push/+server.ts
+let baseImageName = sourceTag;
+if (baseImageName.includes('/')) {
+  const parts = baseImageName.split('/');
+  // Check if first part looks like a registry (contains . or :)
+  if (parts[0].includes('.') || parts[0].includes(':')) {
+    baseImageName = parts.slice(1).join('/');
+  }
+}
+```
+
+## Edge Mode Support
+
+For Hawser Edge environments:
+
+```typescript:src/routes/api/images/push/+server.ts
+if (edgeCheck.isEdge && edgeCheck.environmentId) {
+  if (!isEdgeConnected(edgeCheck.environmentId)) {
+    emit({ status: 'error', error: 'Edge agent not connected' });
+    return;
+  }
+  
+  const authHeader = Buffer.from(JSON.stringify(authConfig)).toString('base64');
+  
+  await sendEdgeStreamRequest(
+    edgeCheck.environmentId,
+    'POST',
+    `/images/${encodeURIComponent(targetTag)}/push`,
+    { onData, onEnd, onError },
+    undefined,
+    { 'X-Registry-Auth': authHeader }
+  );
+}
+```
+
+## Error Handling
+
+The endpoint provides user-friendly error messages:
+
+```typescript:src/routes/api/images/push/+server.ts
+const formatError = (error: any): string => {
+  const errorMessage = error.message || error || '';
+  let userMessage = errorMessage || 'Failed to push image';
+  
+  if (error.statusCode === 401 || errorMessage.includes('401')) {
+    userMessage = 'Authentication failed. Check registry credentials.';
+  } else if (error.statusCode === 404 || errorMessage.includes('404')) {
+    userMessage = 'Image not found';
+  } else if (errorMessage.includes('https') || errorMessage.includes('tls') || 
+             errorMessage.includes('certificate') || errorMessage.includes('x509')) {
+    userMessage = `TLS/HTTPS error. If your registry uses HTTP, add it to Docker's insecure-registries in /etc/docker/daemon.json`;
+  }
+  
+  return userMessage;
+};
+```
+
+## Usage Examples
+
+### Push to Docker Hub
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/images/push?env=1' \
+  -H 'Content-Type: application/json' \
+  -H 'Cookie: session=...' \
+  -d '{
+    "imageId": "sha256:abc123...",
+    "imageName": "myapp:latest",
+    "registryId": 1,
+    "newTag": "username/myapp:v1.0"
+  }'
+```
+
+### Push to Private Registry
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/images/push?env=1' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "imageId": "sha256:def456...",
+    "registryId": 2,
+    "newTag": "app:production"
+  }'
+```
+
+### Push with Progress Tracking
+
+```typescript
+const response = await fetch('/api/images/push?env=1', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    imageId: 'sha256:abc123...',
+    registryId: 1,
+    newTag: 'myapp:v2.0'
+  })
+});
+
+const { jobId } = await response.json();
+
+const eventSource = new EventSource(`/api/jobs/${jobId}`);
+eventSource.addEventListener('data', (e) => {
+  const progress = JSON.parse(e.data);
+  if (progress.data.status === 'complete') {
+    console.log('Push complete:', progress.data.targetTag);
+    eventSource.close();
+  } else if (progress.data.status === 'error') {
+    console.error('Push failed:', progress.data.error);
+    eventSource.close();
+  }
+});
+```
+
+## Audit Logging
+
+Push operations are logged with full details:
+
+```typescript:src/routes/api/images/push/+server.ts
+await auditImage(
+  event,
+  'push',
+  imageId,
+  imageName || targetTag,
+  envIdNum,
+  { targetTag, registry: registry.name }
+);
+```
+
+## Related Operations
+
+- [List Images](/api/images/list) - View available images
+- [Pull Image](/api/images/pull) - Download from registries
+- [Registry Configuration](/features/registries) - Manage registry credentials
+- [Tag Image](/api/images/tag) - Add tags to images
+
+## Notes
+
+- Images are automatically tagged before pushing
+- Docker Hub uses `index.docker.io/v1/` for authentication
+- Private registries must be configured with credentials
+- Insecure registries require Docker daemon configuration
+- Edge mode requires active Hawser agent connection
+- Authentication failures provide helpful error messages
+- TLS/certificate errors suggest insecure-registry configuration

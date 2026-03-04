@@ -1,0 +1,531 @@
+---
+title: 'Authentication'
+description: 'Secure your Dockhand API access with session-based authentication and enterprise SSO'
+---
+
+## Overview
+
+Dockhand supports flexible authentication that can be disabled for simple setups or enabled with multiple providers for enterprise security.
+
+<Note>
+  Authentication is **optional** in Dockhand. When disabled, the API is fully accessible without credentials.
+</Note>
+
+## Authentication State
+
+Always check the authentication state before making API calls:
+
+### Check Session
+
+```bash
+GET /api/auth/session
+```
+
+**Response when auth is disabled:**
+
+```json
+{
+  "authenticated": false,
+  "authEnabled": false
+}
+```
+
+**Response when auth is enabled but not logged in:**
+
+```json
+{
+  "authenticated": false,
+  "authEnabled": true
+}
+```
+
+**Response when authenticated:**
+
+```json
+{
+  "authenticated": true,
+  "authEnabled": true,
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "email": "admin@example.com",
+    "displayName": "Admin User",
+    "avatar": null,
+    "isAdmin": true,
+    "provider": "local",
+    "permissions": {
+      "containers": ["view", "create", "edit", "delete"],
+      "images": ["view", "create", "delete"],
+      "stacks": ["view", "create", "edit", "delete"],
+      "settings": ["view", "edit"]
+    }
+  }
+}
+```
+
+<ResponseField name="authenticated" type="boolean" required>
+  Whether the current session is authenticated
+</ResponseField>
+
+<ResponseField name="authEnabled" type="boolean" required>
+  Whether authentication is enabled globally
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Authenticated user details (only when authenticated)
+</ResponseField>
+
+<ResponseField name="user.id" type="integer">
+  User ID
+</ResponseField>
+
+<ResponseField name="user.username" type="string">
+  Username
+</ResponseField>
+
+<ResponseField name="user.email" type="string">
+  Email address
+</ResponseField>
+
+<ResponseField name="user.displayName" type="string">
+  Display name for UI
+</ResponseField>
+
+<ResponseField name="user.isAdmin" type="boolean">
+  Whether user has admin privileges (Enterprise only)
+</ResponseField>
+
+<ResponseField name="user.provider" type="string">
+  Authentication provider: `local`, `ldap`, or `oidc`
+</ResponseField>
+
+<ResponseField name="user.permissions" type="object">
+  RBAC permissions (Enterprise only)
+</ResponseField>
+
+## Authentication Methods
+
+Dockhand supports three authentication methods:
+
+### Local Authentication (Free)
+
+Database-backed username/password authentication:
+
+- Bcrypt password hashing
+- Rate limiting (5 attempts per IP/username)
+- Optional MFA (Enterprise)
+
+### LDAP Authentication (Enterprise)
+
+Integrate with existing LDAP/Active Directory:
+
+- Multiple LDAP servers
+- Automatic user provisioning
+- Group-based role mapping
+
+### OIDC/SSO Authentication (Free)
+
+Single Sign-On with OpenID Connect providers:
+
+- Support for any OIDC-compliant provider
+- OAuth 2.0 authorization code flow
+- Automatic user creation on first login
+
+## Login Flow
+
+### Local Login
+
+```bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "your-password",
+  "provider": "local"
+}
+```
+
+<ParamField body="username" type="string" required>
+  Username
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password
+</ParamField>
+
+<ParamField body="provider" type="string" default="local">
+  Authentication provider: `local`, `ldap`, or `ldap:ID` for specific LDAP config
+</ParamField>
+
+<ParamField body="mfaToken" type="string">
+  6-digit MFA code (if MFA is enabled for the user)
+</ParamField>
+
+**Success response:**
+
+```json
+{
+  "success": true,
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "email": "admin@example.com",
+    "displayName": "Admin User",
+    "isAdmin": true
+  }
+}
+```
+
+**MFA required response:**
+
+```json
+{
+  "requiresMfa": true
+}
+```
+
+<Note>
+  When MFA is required, submit the login request again with the `mfaToken` parameter.
+</Note>
+
+**Error response:**
+
+```json
+{
+  "error": "Authentication failed"
+}
+```
+
+**Rate limit exceeded:**
+
+```json
+{
+  "error": "Too many login attempts. Please try again in 30 seconds."
+}
+```
+
+### LDAP Login
+
+```bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "jdoe",
+  "password": "ldap-password",
+  "provider": "ldap"
+}
+```
+
+Or target a specific LDAP configuration:
+
+```bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "jdoe",
+  "password": "ldap-password",
+  "provider": "ldap:1"
+}
+```
+
+<Note>
+  LDAP authentication automatically creates local users on first login. Enterprise license required.
+</Note>
+
+### OIDC/SSO Login
+
+OIDC uses browser-based redirects. The flow is:
+
+1. **Initiate OIDC flow**
+
+```bash
+GET /api/auth/oidc/{id}/initiate
+```
+
+Response:
+```json
+{
+  "authorizationUrl": "https://provider.com/oauth/authorize?client_id=..."
+}
+```
+
+2. **Redirect user to authorization URL**
+
+User authenticates with OIDC provider
+
+3. **Provider redirects back to callback**
+
+```
+GET /api/auth/oidc/callback?code=...&state=...
+```
+
+4. **Session cookie is set automatically**
+
+The user is now authenticated.
+
+## Session Management
+
+### Session Cookies
+
+Dockhand uses HTTP-only session cookies:
+
+```
+Set-Cookie: session=abc123...; HttpOnly; SameSite=Lax; Path=/
+```
+
+<Warning>
+  Session cookies are HttpOnly and cannot be accessed via JavaScript for security.
+</Warning>
+
+### Using Sessions in Requests
+
+Include the session cookie in all API requests:
+
+```bash
+curl -X GET "http://localhost:3000/api/containers?env=1" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN"
+```
+
+### Session Duration
+
+Sessions remain valid until:
+
+- User explicitly logs out
+- Server restarts (sessions are stored in-memory)
+- Session expires (configurable, default: 7 days)
+
+### Logout
+
+```bash
+POST /api/auth/logout
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+The session cookie is cleared automatically.
+
+## Public Endpoints
+
+These endpoints are accessible without authentication:
+
+- `/api/auth/login` - Login
+- `/api/auth/logout` - Logout
+- `/api/auth/session` - Check session status
+- `/api/auth/settings` - Get auth configuration
+- `/api/auth/providers` - List available auth providers
+- `/api/auth/oidc/*` - OIDC flow endpoints
+- `/api/license` - License information
+- `/api/changelog` - Application changelog
+- `/api/dependencies` - Dependency versions
+- `/api/health` - Health check
+- `/api/settings/theme` - Theme settings
+- `/api/git/webhook/*` - Git webhooks (validated by signature)
+
+## Initial Setup Mode
+
+When authentication is enabled but no admin user exists:
+
+```bash
+POST /api/users
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "secure-password",
+  "email": "admin@example.com",
+  "isAdmin": true
+}
+```
+
+<Note>
+  The `/api/users` POST endpoint is publicly accessible **only** when no admin user exists. This allows initial setup.
+</Note>
+
+## Authorization & Permissions
+
+### Free Edition
+
+When authentication is enabled in Free edition:
+
+- All authenticated users have **full access** to all resources
+- No role-based access control
+- OIDC providers supported for SSO
+
+### Enterprise Edition
+
+Enterprise edition adds:
+
+- **RBAC (Role-Based Access Control)**
+- **LDAP/Active Directory integration**
+- **Multi-Factor Authentication (MFA)**
+- **Environment-scoped permissions**
+- **Audit logging**
+
+#### Permission Model
+
+Permissions are organized by resource and action:
+
+```json
+{
+  "containers": ["view", "create", "edit", "delete"],
+  "images": ["view", "create", "delete"],
+  "stacks": ["view", "create", "edit", "delete"],
+  "volumes": ["view", "create", "delete"],
+  "networks": ["view", "create", "delete"],
+  "environments": ["view", "create", "edit", "delete"],
+  "settings": ["view", "edit"],
+  "users": ["view", "create", "edit", "delete"],
+  "audit_logs": ["view"]
+}
+```
+
+#### Permission Checks
+
+API endpoints check permissions before allowing operations:
+
+**403 Forbidden - Insufficient permissions:**
+
+```json
+{
+  "error": "Permission denied"
+}
+```
+
+**403 Forbidden - Environment access denied:**
+
+```json
+{
+  "error": "Access denied to this environment"
+}
+```
+
+**403 Forbidden - Enterprise required:**
+
+```json
+{
+  "error": "Enterprise license required"
+}
+```
+
+## Security Best Practices
+
+### Password Requirements
+
+- Minimum length: 8 characters
+- Stored using bcrypt with cost factor 10
+- No maximum length restriction
+
+### Rate Limiting
+
+Login attempts are rate-limited per IP + username:
+
+- **5 failed attempts** trigger rate limiting
+- Exponential backoff: 5s, 15s, 30s, 60s, 60s
+- Successful login clears the rate limit
+
+### Session Security
+
+- HttpOnly cookies prevent XSS attacks
+- SameSite=Lax prevents CSRF attacks
+- Secure flag enabled when using HTTPS
+- Sessions invalidated on logout
+
+### MFA (Enterprise)
+
+Time-based One-Time Passwords (TOTP):
+
+- Compatible with Google Authenticator, Authy, etc.
+- 6-digit codes
+- 30-second time window
+- Per-user enrollment
+
+## Environment Variables
+
+Configure authentication behavior:
+
+```bash
+# Disable local login (force SSO/LDAP only)
+DISABLE_LOCAL_LOGIN=true
+
+# Session secret (auto-generated if not set)
+SESSION_SECRET=your-random-secret-key
+
+# Enable authentication (default: false)
+AUTH_ENABLED=true
+```
+
+## Example: Full Authentication Flow
+
+```bash
+# 1. Check if auth is enabled
+curl -X GET "http://localhost:3000/api/auth/session" \
+  -c cookies.txt
+
+# Response: {"authenticated": false, "authEnabled": true}
+
+# 2. Login
+curl -X POST "http://localhost:3000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -b cookies.txt -c cookies.txt \
+  -d '{
+    "username": "admin",
+    "password": "password123"
+  }'
+
+# Response: {"success": true, "user": {...}}
+
+# 3. Make authenticated requests
+curl -X GET "http://localhost:3000/api/containers?env=1" \
+  -b cookies.txt
+
+# Response: [{"id": "abc", "name": "container1", ...}]
+
+# 4. Logout
+curl -X POST "http://localhost:3000/api/auth/logout" \
+  -b cookies.txt -c cookies.txt
+
+# Response: {"success": true}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**401 Unauthorized on every request**
+
+- Ensure cookies are enabled and being sent
+- Check that session cookie is valid
+- Verify authentication is enabled
+
+**403 Permission denied**
+
+- Check user permissions in Enterprise edition
+- Verify environment access for the target environment
+- Ensure user has required role assigned
+
+**429 Rate limit exceeded**
+
+- Wait for the specified retry-after duration
+- Check for multiple failed login attempts
+- Verify correct username and password
+
+**LDAP authentication fails**
+
+- Test LDAP connection via `/api/auth/ldap/{id}/test`
+- Verify LDAP credentials and configuration
+- Check LDAP server is reachable
+
+**OIDC redirect fails**
+
+- Verify redirect URI is registered with provider
+- Check OIDC configuration matches provider settings
+- Test OIDC connection via `/api/auth/oidc/{id}/test`

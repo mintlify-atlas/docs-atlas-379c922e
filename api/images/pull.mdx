@@ -1,0 +1,345 @@
+---
+title: 'Pull Image'
+description: 'Download Docker images from registries with optional vulnerability scanning'
+icon: 'download'
+---
+
+## Overview
+
+Pull Docker images from public or private registries. Supports automatic vulnerability scanning after pull completion and real-time progress streaming via Server-Sent Events.
+
+## Endpoint
+
+```bash
+POST /api/images/pull?env={environmentId}
+```
+
+## Query Parameters
+
+<ParamField query="env" type="integer">
+  Environment ID where the image will be pulled. Optional for local environments.
+</ParamField>
+
+## Request Body
+
+<ParamField body="image" type="string" required>
+  Image name with optional tag or digest:
+  - `nginx:latest`
+  - `ubuntu:22.04`
+  - `registry.example.com/app:v1.0`
+  - `nginx@sha256:abc123...`
+</ParamField>
+
+<ParamField body="scanAfterPull" type="boolean" default="true">
+  Run vulnerability scan after successful pull. Set to `false` to skip scan-on-pull when caller will handle scanning separately.
+</ParamField>
+
+## Authentication
+
+Requires `images:pull` permission for the specified environment.
+
+### Registry Authentication
+
+Authentication headers are automatically built using configured registry credentials. Private registries must be configured in Dockhand settings.
+
+```typescript:src/routes/api/images/pull/+server.ts
+const authHeaders = await buildRegistryAuthHeader(image);
+```
+
+## Response Format
+
+Returns a job ID for progress tracking via SSE:
+
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+Connect to the SSE endpoint to receive progress updates:
+
+```
+GET /api/jobs/{jobId}
+```
+
+## Progress Events
+
+### Download Progress
+
+```json
+{
+  "id": "abc123",
+  "status": "Downloading",
+  "progressDetail": {
+    "current": 1048576,
+    "total": 10485760
+  },
+  "progress": "[====>     ] 1MB/10MB"
+}
+```
+
+### Extraction Progress
+
+```json
+{
+  "id": "def456",
+  "status": "Extracting",
+  "progressDetail": {
+    "current": 5242880,
+    "total": 10485760
+  }
+}
+```
+
+### Scan Progress (if enabled)
+
+```json
+{
+  "status": "scanning",
+  "message": "Starting vulnerability scan..."
+}
+```
+
+```json
+{
+  "status": "scan-progress",
+  "stage": "analyzing",
+  "message": "Analyzing image layers",
+  "progress": 45
+}
+```
+
+### Scan Results
+
+```json
+{
+  "status": "scan-complete",
+  "message": "Scan complete - found 12 vulnerabilities",
+  "results": [
+    {
+      "imageId": "sha256:abc123...",
+      "imageName": "nginx:latest",
+      "scanner": "grype",
+      "scannedAt": "2024-03-04T10:30:00Z",
+      "scanDuration": 8500,
+      "summary": {
+        "critical": 0,
+        "high": 2,
+        "medium": 5,
+        "low": 5,
+        "negligible": 0,
+        "unknown": 0
+      },
+      "vulnerabilities": [
+        {
+          "id": "CVE-2024-1234",
+          "severity": "high",
+          "package": "openssl",
+          "version": "1.1.1",
+          "fixedVersion": "1.1.1w",
+          "description": "Buffer overflow vulnerability"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Complete
+
+```json
+{
+  "status": "complete"
+}
+```
+
+### Error
+
+```json
+{
+  "status": "error",
+  "error": "Image not found or registry authentication failed"
+}
+```
+
+## Error Responses
+
+<ResponseField name="403" type="object">
+  Permission denied
+  ```json
+  { "error": "Permission denied" }
+  ```
+</ResponseField>
+
+<ResponseField name="error (edge)" type="object">
+  Edge agent not connected
+  ```json
+  { "status": "error", "error": "Edge agent not connected" }
+  ```
+</ResponseField>
+
+## Edge Mode Support
+
+For Hawser Edge environments, pull operations are proxied through the edge agent:
+
+```typescript:src/routes/api/images/pull/+server.ts
+if (edgeCheck.isEdge && edgeCheck.environmentId) {
+  if (!isEdgeConnected(edgeCheck.environmentId)) {
+    sendData({ status: 'error', error: 'Edge agent not connected' });
+    return;
+  }
+  
+  const pullUrl = buildPullUrl(image);
+  const authHeaders = await buildRegistryAuthHeader(image);
+  
+  await sendEdgeStreamRequest(
+    edgeCheck.environmentId,
+    'POST',
+    pullUrl,
+    { onData, onEnd, onError },
+    undefined,
+    authHeaders
+  );
+}
+```
+
+## Tag Parsing
+
+The endpoint intelligently parses image names with tags and digests:
+
+```typescript:src/routes/api/images/pull/+server.ts
+function buildPullUrl(imageName: string): string {
+  let fromImage = imageName;
+  let tag = 'latest';
+  
+  if (imageName.includes('@')) {
+    // Digest format: nginx@sha256:abc123
+    fromImage = imageName;
+    tag = '';
+  } else if (imageName.includes(':')) {
+    // Tag format: nginx:1.21.0
+    const lastColonIndex = imageName.lastIndexOf(':');
+    const potentialTag = imageName.substring(lastColonIndex + 1);
+    if (!potentialTag.includes('/')) {
+      fromImage = imageName.substring(0, lastColonIndex);
+      tag = potentialTag;
+    }
+  }
+  
+  return tag
+    ? `/images/create?fromImage=${encodeURIComponent(fromImage)}&tag=${encodeURIComponent(tag)}`
+    : `/images/create?fromImage=${encodeURIComponent(fromImage)}`;
+}
+```
+
+## Scan-on-Pull
+
+Automatic vulnerability scanning after pull (if scanner is configured):
+
+```typescript:src/routes/api/images/pull/+server.ts
+const handleScanOnPull = async () => {
+  if (skipScanOnPull) return;
+  
+  const { scanner } = await getScannerSettings(envId);
+  if (scanner !== 'none') {
+    sendData({ status: 'scanning', message: 'Starting vulnerability scan...' });
+    
+    const results = await scanImage(image, envId, (progress) => {
+      sendData({ status: 'scan-progress', ...progress });
+    });
+    
+    for (const result of results) {
+      await saveVulnerabilityScan({
+        environmentId: envId ?? null,
+        imageId: result.imageId,
+        imageName: result.imageName,
+        scanner: result.scanner,
+        vulnerabilities: result.vulnerabilities,
+        // ... summary counts
+      });
+    }
+  }
+};
+```
+
+## Usage Examples
+
+### Pull Public Image
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/images/pull?env=1' \
+  -H 'Content-Type: application/json' \
+  -H 'Cookie: session=...' \
+  -d '{
+    "image": "nginx:latest",
+    "scanAfterPull": true
+  }'
+```
+
+### Pull Private Registry Image
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/images/pull?env=1' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "image": "registry.company.com/app:v2.1.0"
+  }'
+```
+
+### Pull with Digest
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/images/pull' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "image": "nginx@sha256:abc123def456..."
+  }'
+```
+
+### Stream Progress (JavaScript)
+
+```typescript
+const response = await fetch('/api/images/pull?env=1', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ image: 'nginx:latest' })
+});
+
+const { jobId } = await response.json();
+
+const eventSource = new EventSource(`/api/jobs/${jobId}`);
+eventSource.addEventListener('progress', (e) => {
+  const data = JSON.parse(e.data);
+  console.log('Progress:', data.status, data.message);
+});
+
+eventSource.addEventListener('result', (e) => {
+  const data = JSON.parse(e.data);
+  console.log('Complete:', data);
+  eventSource.close();
+});
+```
+
+## Audit Logging
+
+Pull operations are automatically logged:
+
+```typescript:src/routes/api/images/pull/+server.ts
+await auditImage(event, 'pull', image, image, envId);
+```
+
+## Related Operations
+
+- [List Images](/api/images/list) - View pulled images
+- [Scan Image](/api/images/scan) - Run vulnerability scans
+- [Push Image](/api/images/push) - Upload to registries
+- [Registry Configuration](/integrations/registries) - Configure private registries
+
+## Notes
+
+- Supports both local and edge environments via Hawser
+- Registry authentication is automatic based on configured registries
+- Scan-on-pull respects environment scanner settings
+- Progress events are streamed in real-time via Server-Sent Events
+- Tag defaults to `latest` if not specified
+- Digest format bypasses tag resolution

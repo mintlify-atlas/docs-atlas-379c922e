@@ -1,0 +1,581 @@
+---
+title: OIDC/SSO Integration
+description: Single Sign-On with any OpenID Connect provider
+---
+
+Dockhand supports OpenID Connect (OIDC) for seamless integration with your existing Identity Provider (IdP). Users can authenticate via SSO without managing separate passwords.
+
+## Supported Providers
+
+Dockhand works with any OIDC-compliant Identity Provider:
+
+- **Keycloak** - Open source IAM solution
+- **Authentik** - Modern identity provider
+- **Auth0** - Cloud authentication service
+- **Okta** - Enterprise identity platform
+- **Azure Active Directory** - Microsoft cloud identity
+- **Google Workspace** - Google's identity platform
+- **GitLab** - Built-in OIDC support
+- **Authelia** - Self-hosted SSO portal
+- **Zitadel** - Cloud-native identity platform
+
+## Configuration
+
+### 1. Configure Your Identity Provider
+
+Before configuring Dockhand, set up an OIDC client in your IdP:
+
+**Client Type**: Confidential  
+**Grant Type**: Authorization Code  
+**Redirect URI**: `https://dockhand.example.com/api/auth/oidc/callback`  
+**PKCE**: Required (S256)  
+
+Save these values:
+- **Issuer URL** (e.g., `https://keycloak.example.com/realms/master`)
+- **Client ID** (e.g., `dockhand`)
+- **Client Secret** (keep secure)
+
+### 2. Add OIDC Provider in Dockhand
+
+Navigate to **Settings > Authentication > OIDC Providers** and click **Add Provider**.
+
+Or via API:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/oidc \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "name": "Keycloak",
+    "enabled": true,
+    "issuerUrl": "https://keycloak.example.com/realms/master",
+    "clientId": "dockhand",
+    "clientSecret": "YOUR_CLIENT_SECRET",
+    "redirectUri": "https://dockhand.example.com/api/auth/oidc/callback",
+    "scopes": "openid profile email",
+    "usernameClaim": "preferred_username",
+    "emailClaim": "email",
+    "displayNameClaim": "name"
+  }'
+```
+
+<ResponseExample>
+```json
+{
+  "id": 1,
+  "name": "Keycloak",
+  "enabled": true,
+  "issuerUrl": "https://keycloak.example.com/realms/master",
+  "clientId": "dockhand",
+  "clientSecret": "********",
+  "redirectUri": "https://dockhand.example.com/api/auth/oidc/callback",
+  "scopes": "openid profile email",
+  "usernameClaim": "preferred_username",
+  "emailClaim": "email",
+  "displayNameClaim": "name",
+  "createdAt": "2026-03-04T10:00:00Z"
+}
+```
+</ResponseExample>
+
+### Configuration Fields
+
+<ParamField path="name" type="string" required>
+  Display name for the provider (shown on login page)
+</ParamField>
+
+<ParamField path="enabled" type="boolean" default="false">
+  Enable/disable this provider without deleting configuration
+</ParamField>
+
+<ParamField path="issuerUrl" type="string" required>
+  OIDC issuer URL (base URL for .well-known/openid-configuration)
+  
+  **Examples:**
+  - Keycloak: `https://keycloak.example.com/realms/master`
+  - Auth0: `https://tenant.auth0.com`
+  - Authentik: `https://auth.example.com/application/o/dockhand/`
+</ParamField>
+
+<ParamField path="clientId" type="string" required>
+  OAuth2 Client ID from your Identity Provider
+</ParamField>
+
+<ParamField path="clientSecret" type="string" required>
+  OAuth2 Client Secret (stored encrypted in database)
+</ParamField>
+
+<ParamField path="redirectUri" type="string" required>
+  Callback URL where IdP sends authorization code.
+  Must be `https://YOUR_DOMAIN/api/auth/oidc/callback`
+</ParamField>
+
+<ParamField path="scopes" type="string" default="openid profile email">
+  OAuth2 scopes to request (space-separated)
+</ParamField>
+
+<ParamField path="usernameClaim" type="string" default="preferred_username">
+  JWT claim containing the username
+</ParamField>
+
+<ParamField path="emailClaim" type="string" default="email">
+  JWT claim containing the email address
+</ParamField>
+
+<ParamField path="displayNameClaim" type="string" default="name">
+  JWT claim containing the display name
+</ParamField>
+
+<ParamField path="adminClaim" type="string" optional>
+  JWT claim for admin role detection (e.g., `realm_roles`, `groups`)
+</ParamField>
+
+<ParamField path="adminValue" type="string" optional>
+  Value(s) in adminClaim that grant admin access. Comma-separated for multiple.
+  
+  **Examples:**
+  - Single: `admin`
+  - Multiple: `admin,superuser,sysadmin`
+</ParamField>
+
+<ParamField path="roleMappingsClaim" type="string" default="groups">
+  JWT claim containing group/role memberships (Enterprise)
+</ParamField>
+
+<ParamField path="roleMappings" type="array" optional>
+  Map IdP groups to Dockhand roles (Enterprise). JSON array of mappings.
+  
+  **Example:**
+  ```json
+  [
+    {"claimValue": "docker-admins", "roleId": 2},
+    {"claimValue": "docker-viewers", "roleId": 3}
+  ]
+  ```
+</ParamField>
+
+## Testing Configuration
+
+Test your OIDC setup before enabling:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/oidc/1/test \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN"
+```
+
+<ResponseExample>
+```json
+{
+  "success": true,
+  "issuer": "https://keycloak.example.com/realms/master",
+  "endpoints": {
+    "authorization": "https://keycloak.example.com/realms/master/protocol/openid-connect/auth",
+    "token": "https://keycloak.example.com/realms/master/protocol/openid-connect/token",
+    "userinfo": "https://keycloak.example.com/realms/master/protocol/openid-connect/userinfo"
+  }
+}
+```
+</ResponseExample>
+
+This verifies Dockhand can fetch the OIDC discovery document from your IdP.
+
+## Authentication Flow
+
+### 1. User Initiates Login
+
+User clicks "Sign in with Keycloak" on the login page.
+
+Dockhand generates:
+- **State**: 32-byte random value (CSRF protection)
+- **Nonce**: 16-byte random value (replay protection)
+- **PKCE Code Verifier**: 32-byte random value
+- **PKCE Code Challenge**: SHA-256 hash of verifier
+
+User is redirected to IdP's authorization endpoint:
+
+```
+https://keycloak.example.com/realms/master/protocol/openid-connect/auth?
+  response_type=code&
+  client_id=dockhand&
+  redirect_uri=https://dockhand.example.com/api/auth/oidc/callback&
+  scope=openid+profile+email&
+  state=RANDOM_STATE&
+  nonce=RANDOM_NONCE&
+  code_challenge=SHA256_HASH&
+  code_challenge_method=S256
+```
+
+### 2. User Authenticates with IdP
+
+User logs in at the Identity Provider (username/password, 2FA, etc.).
+
+### 3. IdP Redirects Back
+
+After successful authentication, IdP redirects to:
+
+```
+https://dockhand.example.com/api/auth/oidc/callback?
+  code=AUTHORIZATION_CODE&
+  state=RANDOM_STATE
+```
+
+### 4. Dockhand Exchanges Code for Tokens
+
+Dockhand validates the state, then exchanges the authorization code:
+
+```http
+POST https://keycloak.example.com/realms/master/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&
+code=AUTHORIZATION_CODE&
+redirect_uri=https://dockhand.example.com/api/auth/oidc/callback&
+client_id=dockhand&
+client_secret=YOUR_CLIENT_SECRET&
+code_verifier=PKCE_CODE_VERIFIER
+```
+
+Response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIs...",
+  "id_token": "eyJhbGciOiJSUzI1NiIs...",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}
+```
+
+### 5. Extract User Claims
+
+Dockhand decodes the ID token and optionally fetches userinfo:
+
+```json
+{
+  "sub": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "preferred_username": "alice",
+  "email": "alice@example.com",
+  "name": "Alice Johnson",
+  "realm_roles": ["admin", "user"],
+  "groups": ["docker-admins"]
+}
+```
+
+### 6. Create/Update Local User
+
+Dockhand creates or updates the local user account:
+
+```typescript
+const username = claims[config.usernameClaim]; // "alice"
+const email = claims[config.emailClaim];       // "alice@example.com"
+const displayName = claims[config.displayNameClaim]; // "Alice Johnson"
+
+let user = await getUserByUsername(username);
+if (!user) {
+  user = await createUser({
+    username,
+    email,
+    displayName,
+    passwordHash: '', // No local password for SSO users
+    authProvider: 'oidc:Keycloak'
+  });
+}
+```
+
+### 7. Assign Admin Role
+
+If `adminClaim` and `adminValue` are configured:
+
+```typescript
+if (config.adminClaim && config.adminValue) {
+  const claimValue = claims[config.adminClaim]; // ["admin", "user"]
+  const adminValues = config.adminValue.split(','); // ["admin"]
+  
+  if (claimValue.includes(adminValues[0])) {
+    await assignUserRole(user.id, adminRoleId, null);
+  }
+}
+```
+
+### 8. Create Session
+
+Dockhand creates a session and sets the session cookie:
+
+```typescript
+const session = await createUserSession(user.id, 'oidc', cookies, request);
+```
+
+### 9. Redirect to Dashboard
+
+User is redirected to the dashboard (or original destination URL).
+
+## Admin Role Mapping
+
+Automatically grant admin access based on IdP claims:
+
+```json
+{
+  "adminClaim": "realm_roles",
+  "adminValue": "admin,superuser"
+}
+```
+
+If the user has `realm_roles: ["admin"]` or `realm_roles: ["superuser"]`, they receive the Admin role in Dockhand.
+
+### Multiple Admin Values
+
+Use comma-separated values to accept multiple groups:
+
+```json
+{
+  "adminClaim": "groups",
+  "adminValue": "dockhand-admins,infrastructure-team,sre-team"
+}
+```
+
+## Role Mappings (Enterprise)
+
+Map IdP groups to Dockhand roles for fine-grained access control:
+
+### 1. Create Roles
+
+First, create roles in Dockhand (Settings > Roles):
+
+- **Docker Admins** (ID: 2) - Full access
+- **Docker Viewers** (ID: 3) - Read-only access
+- **Dev Team** (ID: 4) - Access to dev environment only
+
+### 2. Configure Role Mappings
+
+Update OIDC provider with role mappings:
+
+```bash
+curl -X PATCH http://localhost:8000/api/auth/oidc/1 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dockhand_session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "roleMappingsClaim": "groups",
+    "roleMappings": [
+      {"claimValue": "dockhand-admins", "roleId": 2},
+      {"claimValue": "dockhand-viewers", "roleId": 3},
+      {"claimValue": "dev-team", "roleId": 4}
+    ]
+  }'
+```
+
+### 3. Configure IdP to Send Groups
+
+Ensure your IdP includes group memberships in the ID token or userinfo response:
+
+**Keycloak:** Add a mapper to include group memberships in the `groups` claim.
+
+**Auth0:** Create a rule to add groups to the ID token.
+
+**Azure AD:** Include `GroupMember.Read.All` permission and map groups.
+
+### How It Works
+
+When a user logs in:
+
+1. Dockhand extracts the groups claim: `["dockhand-viewers", "dev-team"]`
+2. Matches claim values to role mappings
+3. Assigns Dockhand roles: Viewer (ID 3), Dev Team (ID 4)
+4. Removes roles no longer present in IdP groups
+
+Roles are synced on every login, keeping Dockhand in sync with your IdP.
+
+## Provider-Specific Examples
+
+### Keycloak
+
+```json
+{
+  "name": "Keycloak",
+  "issuerUrl": "https://keycloak.example.com/realms/master",
+  "clientId": "dockhand",
+  "clientSecret": "abc123...",
+  "redirectUri": "https://dockhand.example.com/api/auth/oidc/callback",
+  "scopes": "openid profile email",
+  "usernameClaim": "preferred_username",
+  "emailClaim": "email",
+  "displayNameClaim": "name",
+  "adminClaim": "realm_roles",
+  "adminValue": "admin"
+}
+```
+
+### Authentik
+
+```json
+{
+  "name": "Authentik",
+  "issuerUrl": "https://auth.example.com/application/o/dockhand/",
+  "clientId": "dockhand",
+  "clientSecret": "xyz789...",
+  "redirectUri": "https://dockhand.example.com/api/auth/oidc/callback",
+  "scopes": "openid profile email",
+  "usernameClaim": "preferred_username",
+  "emailClaim": "email",
+  "displayNameClaim": "name",
+  "adminClaim": "groups",
+  "adminValue": "admins"
+}
+```
+
+### Auth0
+
+```json
+{
+  "name": "Auth0",
+  "issuerUrl": "https://tenant.auth0.com",
+  "clientId": "your_client_id",
+  "clientSecret": "your_client_secret",
+  "redirectUri": "https://dockhand.example.com/api/auth/oidc/callback",
+  "scopes": "openid profile email",
+  "usernameClaim": "email",
+  "emailClaim": "email",
+  "displayNameClaim": "name",
+  "adminClaim": "https://dockhand.example.com/roles",
+  "adminValue": "admin"
+}
+```
+
+**Note:** Auth0 requires custom claims to be namespaced (e.g., `https://dockhand.example.com/roles`).
+
+### Azure Active Directory
+
+```json
+{
+  "name": "Azure AD",
+  "issuerUrl": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+  "clientId": "your_application_id",
+  "clientSecret": "your_client_secret",
+  "redirectUri": "https://dockhand.example.com/api/auth/oidc/callback",
+  "scopes": "openid profile email",
+  "usernameClaim": "preferred_username",
+  "emailClaim": "email",
+  "displayNameClaim": "name",
+  "adminClaim": "roles",
+  "adminValue": "Admin"
+}
+```
+
+## SSO-Only Mode
+
+Disable local username/password authentication:
+
+```bash
+docker run -e DISABLE_LOCAL_LOGIN=true dockhand/dockhand:latest
+```
+
+This forces all users to authenticate via OIDC, preventing password-based attacks.
+
+<Warning>
+Keep at least one local admin account as a backup before enabling SSO-only mode. If your IdP goes down, you won't be able to log in.
+</Warning>
+
+## Security Features
+
+### PKCE (Proof Key for Code Exchange)
+
+Dockhand uses PKCE (RFC 7636) to prevent authorization code interception attacks:
+
+1. Generate 32-byte random `code_verifier`
+2. Compute `code_challenge = SHA256(code_verifier)` in base64url
+3. Send `code_challenge` with authorization request
+4. Send `code_verifier` with token exchange
+5. IdP verifies `SHA256(code_verifier) === code_challenge`
+
+This protects against malicious apps intercepting the authorization code.
+
+### State Parameter (CSRF Protection)
+
+Dockhand generates a cryptographically random state parameter:
+
+- 32 bytes of entropy (256 bits)
+- Stored in-memory with 10-minute expiration
+- Validated on callback
+- Single-use (deleted after validation)
+
+This prevents Cross-Site Request Forgery attacks.
+
+### Nonce Parameter (Replay Protection)
+
+Dockhand includes a nonce in the ID token:
+
+- 16 bytes of entropy (128 bits)
+- Included in authorization request
+- IdP echoes it in ID token
+- Validated on callback
+
+This prevents token replay attacks.
+
+## Troubleshooting
+
+### Invalid Redirect URI
+
+**Error:** `redirect_uri_mismatch`
+
+**Solution:** Ensure the redirect URI in Dockhand exactly matches the one configured in your IdP:
+
+```
+https://dockhand.example.com/api/auth/oidc/callback
+```
+
+No trailing slash, exact protocol (https), exact domain.
+
+### Discovery Document Not Found
+
+**Error:** `Failed to fetch OIDC discovery document`
+
+**Solution:** Verify the issuer URL is correct and accessible:
+
+```bash
+curl https://keycloak.example.com/realms/master/.well-known/openid-configuration
+```
+
+Common issues:
+- Missing `/realms/{realm-name}` in Keycloak URLs
+- Trailing slash in issuer URL
+- Firewall blocking outbound HTTPS from Dockhand
+
+### User Creation Failed
+
+**Error:** `Username claim not found in token`
+
+**Solution:** Check the `usernameClaim` configuration. Decode your ID token at [jwt.io](https://jwt.io) and verify the claim name.
+
+### Admin Role Not Assigned
+
+**Issue:** User logs in but doesn't have admin access.
+
+**Solution:**
+1. Verify `adminClaim` and `adminValue` are configured
+2. Check the ID token contains the admin claim
+3. Ensure claim value matches `adminValue` exactly (case-sensitive)
+4. Try comma-separated values if using multiple groups
+
+## Source Code Reference
+
+- `src/lib/server/auth.ts:1128-1533` - OIDC authentication logic
+- `src/routes/api/auth/oidc/+server.ts` - CRUD endpoints
+- `src/routes/api/auth/oidc/[id]/initiate/+server.ts` - SSO initiation
+- `src/routes/api/auth/oidc/callback/+server.ts` - Callback handler
+- `src/routes/api/auth/providers/+server.ts` - Provider list
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="RBAC" icon="users-gear" href="/auth/rbac">
+    Configure role-based access control (Enterprise)
+  </Card>
+  <Card title="Local Users" icon="user" href="/auth/local-users">
+    Manage fallback admin accounts
+  </Card>
+  <Card title="LDAP" icon="building" href="/auth/ldap">
+    Connect to Active Directory (Enterprise)
+  </Card>
+  <Card title="Two-Factor Auth" icon="mobile" href="/auth/2fa">
+    Add 2FA for local admin accounts
+  </Card>
+</CardGroup>

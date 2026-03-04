@@ -1,0 +1,159 @@
+---
+title: 'List Images'
+description: 'Retrieve all Docker images in an environment'
+icon: 'list'
+---
+
+## Overview
+
+Fetch the list of Docker images available in a specified environment. Returns an empty array if no environment is specified or if the Docker daemon is unavailable.
+
+## Endpoint
+
+```bash
+GET /api/images?env={environmentId}
+```
+
+## Query Parameters
+
+<ParamField query="env" type="integer" required>
+  Environment ID to list images from. Required to return any results.
+</ParamField>
+
+## Authentication
+
+Requires `images:view` permission for the specified environment.
+
+## Response
+
+Returns an array of image objects:
+
+```json
+[
+  {
+    "Id": "sha256:abc123...",
+    "RepoTags": ["nginx:latest"],
+    "RepoDigests": ["nginx@sha256:def456..."],
+    "Created": 1709510400,
+    "Size": 142000000,
+    "VirtualSize": 142000000,
+    "SharedSize": 0,
+    "Labels": {
+      "maintainer": "NGINX Docker Maintainers"
+    },
+    "Containers": 2
+  }
+]
+```
+
+## Response Fields
+
+<ResponseField name="Id" type="string">
+  Unique image identifier (SHA256 hash)
+</ResponseField>
+
+<ResponseField name="RepoTags" type="string[]">
+  Repository tags associated with the image
+</ResponseField>
+
+<ResponseField name="RepoDigests" type="string[]">
+  Content-addressable digests
+</ResponseField>
+
+<ResponseField name="Created" type="integer">
+  Unix timestamp when the image was created
+</ResponseField>
+
+<ResponseField name="Size" type="integer">
+  Image size in bytes
+</ResponseField>
+
+<ResponseField name="VirtualSize" type="integer">
+  Total size including shared layers
+</ResponseField>
+
+<ResponseField name="Containers" type="integer">
+  Number of containers using this image
+</ResponseField>
+
+## Error Responses
+
+<ResponseField name="403" type="object">
+  Permission denied - user lacks `images:view` permission or environment access
+  ```json
+  { "error": "Permission denied" }
+  ```
+</ResponseField>
+
+<ResponseField name="404" type="object">
+  Environment not found
+  ```json
+  { "error": "Environment not found" }
+  ```
+</ResponseField>
+
+## Implementation
+
+```typescript:src/routes/api/images/+server.ts
+export const GET: RequestHandler = async ({ url, cookies }) => {
+  const auth = await authorize(cookies);
+  
+  const envId = url.searchParams.get('env');
+  const envIdNum = envId ? parseInt(envId) : undefined;
+  
+  // Permission check with environment context
+  if (auth.authEnabled && !await auth.can('images', 'view', envIdNum)) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+  
+  // Early return if no environment specified
+  if (!envIdNum) {
+    return json([]);
+  }
+  
+  try {
+    const images = await listImages(envIdNum);
+    return json(images);
+  } catch (error) {
+    if (error instanceof EnvironmentNotFoundError) {
+      return json({ error: 'Environment not found' }, { status: 404 });
+    }
+    // Return empty array instead of error to allow UI to load
+    return json([]);
+  }
+};
+```
+
+## Usage Examples
+
+### Fetch Images for Environment
+
+```bash
+curl -X GET 'https://dockhand.example.com/api/images?env=1' \
+  -H 'Cookie: session=...'
+```
+
+### Filter Images in UI
+
+```typescript
+const response = await fetch(`/api/images?env=${environmentId}`);
+const images = await response.json();
+
+const filteredImages = images.filter(img => 
+  img.RepoTags?.some(tag => tag.includes('nginx'))
+);
+```
+
+## Related Operations
+
+- [Pull Image](/api/images/pull) - Download images from registries
+- [Scan Image](/api/images/scan) - Run vulnerability scans
+- [Push Image](/api/images/push) - Upload to registries
+- [Prune Images](/api/images/prune) - Remove unused images
+
+## Notes
+
+- Returns empty array on connection errors to prevent UI failures
+- Requires valid environment ID to return results
+- Enterprise users must have environment access permissions
+- Images are fetched directly from Docker daemon via Docker API

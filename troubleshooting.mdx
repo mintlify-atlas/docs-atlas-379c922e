@@ -1,0 +1,284 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Dockhand
+---
+
+## Common Issues
+
+### Installation Issues
+
+#### Docker Socket Permission Denied
+
+**Problem**: Cannot connect to Docker daemon.
+
+**Solution**:
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+
+# Restart session or run
+newgrp docker
+
+# Verify docker socket permissions
+ls -la /var/run/docker.sock
+```
+
+#### Port Already in Use
+
+**Problem**: Default port 8033 is already occupied.
+
+**Solution**:
+```bash
+# Change the port mapping
+docker run -d \
+  -p 8034:8033 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --name dockhand \
+  ghcr.io/finsys/dockhand:latest
+```
+
+### Connection Issues
+
+#### Cannot Connect to Remote Docker Host
+
+**Problem**: Remote environment fails to connect.
+
+**Solution**:
+1. Verify SSH access:
+   ```bash
+   ssh user@remote-host docker ps
+   ```
+2. Check Docker daemon is listening on TCP:
+   ```bash
+   # On remote host
+   sudo systemctl status docker
+   ```
+3. Ensure firewall allows connections
+4. Use SSH tunnel if direct access is blocked:
+   ```bash
+   ssh -L 2375:localhost:2375 user@remote-host
+   ```
+
+#### WebSocket Connection Failed
+
+**Problem**: Real-time updates not working.
+
+**Solution**:
+- Check browser console for errors
+- Verify reverse proxy WebSocket support (nginx/traefik)
+- For nginx, add:
+  ```nginx
+  location / {
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+  ```
+
+### Container Management
+
+#### Container Won't Start
+
+**Problem**: Container fails to start or immediately exits.
+
+**Solution**:
+1. Check container logs in Dockhand
+2. Verify port conflicts:
+   ```bash
+   docker ps -a
+   netstat -tulpn | grep <port>
+   ```
+3. Check resource limits (CPU/memory)
+4. Verify volume mount paths exist
+
+#### Stack Deployment Fails
+
+**Problem**: Docker Compose stack fails to deploy.
+
+**Solution**:
+1. Validate compose file syntax:
+   ```bash
+   docker compose -f compose.yml config
+   ```
+2. Check for:
+   - Missing environment variables
+   - Invalid volume paths
+   - Network conflicts
+   - Image availability
+3. Review stack logs in Activity tab
+
+### Git Integration
+
+#### Git Clone Fails
+
+**Problem**: Cannot clone repository for stack deployment.
+
+**Solution**:
+1. For private repos, add SSH key or credentials
+2. Verify Git URL format:
+   - SSH: `git@github.com:user/repo.git`
+   - HTTPS: `https://github.com/user/repo.git`
+3. Check network connectivity from container
+4. For self-signed certificates:
+   ```bash
+   git config --global http.sslVerify false
+   ```
+
+#### Webhook Not Triggering
+
+**Problem**: Git webhook doesn't update stack.
+
+**Solution**:
+1. Verify webhook URL is accessible from Git provider
+2. Check webhook secret matches
+3. Review Activity logs for webhook events
+4. Ensure Dockhand is accessible via public URL/domain
+
+### Database Issues
+
+#### SQLite Database Locked
+
+**Problem**: Database operations fail with "database is locked" error.
+
+**Solution**:
+```bash
+# Restart Dockhand container
+docker restart dockhand
+
+# If persists, check for stale locks
+sqlite3 /data/dockhand.db "PRAGMA busy_timeout=30000;"
+```
+
+#### Migration Fails
+
+**Problem**: Database migration errors on startup.
+
+**Solution**:
+1. Backup database before attempting fix
+2. Check logs for specific migration error
+3. For corrupted database:
+   ```bash
+   # Backup first
+   cp /data/dockhand.db /data/dockhand.db.backup
+   
+   # Check integrity
+   sqlite3 /data/dockhand.db "PRAGMA integrity_check;"
+   ```
+
+### Authentication Issues
+
+#### Forgot Admin Password
+
+**Problem**: Cannot login to Dockhand.
+
+**Solution**:
+```bash
+# Reset admin password via container
+docker exec -it dockhand bun scripts/reset-password.js admin
+```
+
+#### OIDC Login Fails
+
+**Problem**: SSO authentication not working.
+
+**Solution**:
+1. Verify OIDC configuration:
+   - Client ID and secret
+   - Redirect URI matches: `https://your-domain/auth/callback`
+   - Scopes include `openid`, `profile`, `email`
+2. Check provider configuration
+3. Review browser console and Dockhand logs
+
+### Performance Issues
+
+#### High Memory Usage
+
+**Problem**: Dockhand container consuming excessive memory.
+
+**Solution**:
+1. Check number of containers being monitored
+2. Reduce log retention period in Settings
+3. Set memory limits:
+   ```bash
+   docker update --memory=512m --memory-swap=1g dockhand
+   ```
+
+#### Slow UI Response
+
+**Problem**: Interface is sluggish or unresponsive.
+
+**Solution**:
+1. Check Docker daemon performance
+2. Reduce polling intervals in Settings
+3. Clear browser cache
+4. For remote hosts, check network latency
+
+### Data Persistence
+
+#### Data Lost After Restart
+
+**Problem**: Settings and configurations don't persist.
+
+**Solution**:
+```bash
+# Ensure volume is mounted correctly
+docker run -d \
+  -v dockhand-data:/data \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --name dockhand \
+  ghcr.io/finsys/dockhand:latest
+
+# Verify volume exists
+docker volume ls | grep dockhand
+```
+
+## Getting Help
+
+If you're still experiencing issues:
+
+1. Check the [FAQ](/faq) for additional answers
+2. Review logs:
+   ```bash
+   docker logs dockhand
+   ```
+3. Enable debug mode:
+   ```bash
+   docker run -e DEBUG=true ...
+   ```
+4. Search existing [GitHub Issues](https://github.com/Finsys/dockhand/issues)
+5. Create a new issue with:
+   - Dockhand version
+   - Docker version
+   - Host OS
+   - Complete error messages
+   - Steps to reproduce
+
+## Diagnostic Commands
+
+Useful commands for troubleshooting:
+
+```bash
+# Check Dockhand status
+docker ps -f name=dockhand
+
+# View logs
+docker logs -f dockhand
+
+# Inspect container
+docker inspect dockhand
+
+# Check resource usage
+docker stats dockhand
+
+# Verify Docker socket
+docker version
+
+# Test Docker API
+curl --unix-socket /var/run/docker.sock http://localhost/v1.41/containers/json
+
+# Check network connectivity
+docker exec dockhand ping -c 4 8.8.8.8
+
+# Database integrity (SQLite)
+docker exec dockhand sqlite3 /data/dockhand.db "PRAGMA integrity_check;"
+```

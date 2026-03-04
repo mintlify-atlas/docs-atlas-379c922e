@@ -1,0 +1,295 @@
+---
+title: FAQ
+description: Frequently asked questions about Dockhand
+---
+
+## General
+
+<Accordion title="What is Dockhand?">
+Dockhand is a modern Docker management UI that provides real-time container management, Docker Compose stack orchestration, and multi-environment support. It's built with SvelteKit and Bun, offering a lightweight, fast, and privacy-focused alternative to other Docker management tools.
+</Accordion>
+
+<Accordion title="What makes Dockhand different from other Docker UIs?">
+Dockhand stands out with:
+- Modern tech stack (Svelte 5, SvelteKit 2, Bun runtime)
+- Custom OS layer built from Wolfi packages for enhanced security
+- Native Git integration with webhook support
+- Real-time updates via WebSockets
+- Both SQLite and PostgreSQL support
+- Privacy-focused with no telemetry or tracking
+- Business Source License ensuring long-term sustainability
+</Accordion>
+
+<Accordion title="Is Dockhand open source?">
+Dockhand uses the Business Source License 1.1 (BSL 1.1), which allows free use for most purposes but restricts offering it as a commercial SaaS service. The license will convert to Apache 2.0 on January 1, 2029, making it fully open source.
+</Accordion>
+
+## Licensing
+
+<Accordion title="Can I use Dockhand for free?">
+Yes! Dockhand is free for:
+- Personal use and home labs
+- Internal business use (any size organization)
+- Non-profit organizations
+- Educational and research purposes
+- Evaluation and testing
+
+The only restriction is offering Dockhand itself as a commercial hosted/managed service to third parties.
+</Accordion>
+
+<Accordion title="What is the Business Source License?">
+The Business Source License (BSL 1.1) is a license that:
+- Grants you the right to use, modify, and redistribute the software
+- Includes an "Additional Use Grant" that permits most production uses
+- Restricts offering the software as a competing commercial SaaS service
+- Automatically converts to an Open Source license (Apache 2.0) after the Change Date (January 1, 2029)
+
+For full details, see the [License](/license) page.
+</Accordion>
+
+<Accordion title="Can MSPs use Dockhand for client management?">
+Yes! Managed service providers (MSPs) can use Dockhand to manage Docker infrastructure on behalf of their clients, provided they don't offer Dockhand itself as the primary service product.
+</Accordion>
+
+<Accordion title="Do I need a commercial license?">
+You only need a commercial license if you want to offer Dockhand as a commercial hosted service, managed service, or SaaS offering where Docker container management is the primary value proposition. For commercial licensing inquiries, visit [dockhand.pro](https://dockhand.pro).
+</Accordion>
+
+## Installation & Setup
+
+<Accordion title="What are the system requirements?">
+Minimal requirements:
+- Docker Engine 20.10 or newer
+- 512 MB RAM (1 GB recommended)
+- 100 MB disk space
+- Any modern web browser
+
+Supported platforms:
+- Linux (amd64, arm64)
+- macOS with Docker Desktop
+- Windows with Docker Desktop or WSL2
+</Accordion>
+
+<Accordion title="How do I install Dockhand?">
+Installation is simple with Docker:
+
+```bash
+docker run -d \
+  -p 8033:8033 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand-data:/data \
+  --name dockhand \
+  --restart unless-stopped \
+  ghcr.io/finsys/dockhand:latest
+```
+
+Then access at `http://localhost:8033`
+
+For detailed instructions, see the [Installation Guide](/installation).
+</Accordion>
+
+<Accordion title="Can I run Dockhand without Docker?">
+No, Dockhand is distributed as a Docker image and requires Docker to run. This ensures consistent deployment across all platforms and simplifies updates.
+</Accordion>
+
+<Accordion title="How do I update Dockhand?">
+Update to the latest version:
+
+```bash
+docker pull ghcr.io/finsys/dockhand:latest
+docker stop dockhand
+docker rm dockhand
+# Run the installation command again
+```
+
+Your data is preserved in the `dockhand-data` volume.
+</Accordion>
+
+## Features & Usage
+
+<Accordion title="Can I manage multiple Docker hosts?">
+Yes! Dockhand supports managing multiple environments:
+- Local Docker host
+- Remote Docker hosts via SSH
+- Docker hosts with TCP/TLS
+
+Add environments in Settings > Environments.
+</Accordion>
+
+<Accordion title="Does Dockhand support Docker Swarm or Kubernetes?">
+Currently, Dockhand focuses on Docker and Docker Compose. Swarm and Kubernetes support are not available in the current version.
+</Accordion>
+
+<Accordion title="How does Git integration work?">
+Dockhand can deploy Docker Compose stacks directly from Git repositories:
+1. Provide a Git repository URL (HTTPS or SSH)
+2. Specify the compose file path
+3. Configure environment variables
+4. Set up webhooks for auto-deployment on push
+
+Supports GitHub, GitLab, Bitbucket, and self-hosted Git servers.
+</Accordion>
+
+<Accordion title="Can I schedule container operations?">
+Yes! Dockhand includes a scheduler for:
+- Starting/stopping containers on a schedule
+- Automated backups
+- Periodic maintenance tasks
+
+Schedules use cron syntax for flexible timing.
+</Accordion>
+
+<Accordion title="What databases are supported?">
+Dockhand supports:
+- SQLite (default, no configuration needed)
+- PostgreSQL (for high-availability deployments)
+
+Configure via environment variables on startup.
+</Accordion>
+
+## Security & Authentication
+
+<Accordion title="How do I secure my Dockhand instance?">
+Best practices:
+1. Use strong passwords or SSO
+2. Run behind a reverse proxy with HTTPS
+3. Restrict network access (firewall/VPN)
+4. Keep Dockhand updated
+5. Enable audit logging
+6. Use read-only Docker socket if appropriate:
+   ```bash
+   -v /var/run/docker.sock:/var/run/docker.sock:ro
+   ```
+</Accordion>
+
+<Accordion title="What authentication methods are supported?">
+- Local user accounts with password authentication
+- OIDC/OAuth2 Single Sign-On (SSO)
+- LDAP integration
+- Optional Two-Factor Authentication (2FA)
+- Role-Based Access Control (Enterprise)
+</Accordion>
+
+<Accordion title="Can I use Dockhand with a read-only Docker socket?">
+Yes, for security you can mount the Docker socket as read-only if you only need monitoring capabilities. However, management operations (start, stop, create) will not be available.
+</Accordion>
+
+<Accordion title="Does Dockhand send telemetry or analytics?">
+No. Dockhand is completely privacy-focused and does not send any telemetry, analytics, or usage data to external servers. All data stays on your infrastructure.
+</Accordion>
+
+## Deployment
+
+<Accordion title="Can I deploy Dockhand in production?">
+Yes! Dockhand is production-ready. Recommended setup:
+- Use PostgreSQL for database
+- Deploy behind reverse proxy (nginx/Traefik) with HTTPS
+- Configure backups for database
+- Set resource limits
+- Enable authentication
+- Use health checks
+</Accordion>
+
+<Accordion title="How do I backup Dockhand data?">
+For SQLite:
+```bash
+docker exec dockhand sqlite3 /data/dockhand.db ".backup /data/backup.db"
+docker cp dockhand:/data/backup.db ./backup.db
+```
+
+For PostgreSQL, use standard PostgreSQL backup tools (pg_dump).
+</Accordion>
+
+<Accordion title="Can I run Dockhand in Docker Swarm or Kubernetes?">
+While possible, Dockhand is primarily designed for single-node deployment. For HA deployments, use PostgreSQL for shared database state and load balance multiple instances.
+</Accordion>
+
+## Development & Contributing
+
+<Accordion title="Can I contribute to Dockhand?">
+Yes! Contributions are welcome. See the [Contributing Guide](/contributing) for details on:
+- Setting up development environment
+- Submitting pull requests
+- Code standards
+- CLA requirements
+</Accordion>
+
+<Accordion title="What is the tech stack?">
+- **Frontend**: SvelteKit 2, Svelte 5, shadcn-svelte, TailwindCSS
+- **Backend**: Bun runtime with SvelteKit API routes
+- **Database**: SQLite or PostgreSQL via Drizzle ORM
+- **Base OS**: Wolfi packages via apko
+- **Docker API**: Direct API calls (no SDK dependency)
+</Accordion>
+
+<Accordion title="How do I run Dockhand for development?">
+```bash
+git clone https://github.com/Finsys/dockhand.git
+cd dockhand
+bun install
+bun dev
+```
+
+Access at `http://localhost:5173`
+
+See [Contributing Guide](/contributing) for full setup.
+</Accordion>
+
+## Troubleshooting
+
+<Accordion title="Dockhand can't connect to Docker">
+Common solutions:
+1. Verify Docker socket is mounted correctly
+2. Check user permissions on Docker socket
+3. Ensure Docker daemon is running
+4. Try: `docker exec dockhand docker ps`
+
+See [Troubleshooting](/troubleshooting) for detailed solutions.
+</Accordion>
+
+<Accordion title="Where can I find logs?">
+```bash
+docker logs dockhand
+
+# Follow logs in real-time
+docker logs -f dockhand
+
+# Last 100 lines
+docker logs --tail 100 dockhand
+```
+</Accordion>
+
+<Accordion title="How do I report bugs?">
+1. Check existing [GitHub Issues](https://github.com/Finsys/dockhand/issues)
+2. Create a new issue with:
+   - Dockhand version
+   - Docker version
+   - Host OS
+   - Steps to reproduce
+   - Error messages/logs
+</Accordion>
+
+## Support & Community
+
+<Accordion title="Where can I get help?">
+- [Documentation](https://dockhand.pro/manual)
+- [GitHub Discussions](https://github.com/Finsys/dockhand/discussions)
+- [GitHub Issues](https://github.com/Finsys/dockhand/issues) for bugs
+- [Troubleshooting Guide](/troubleshooting)
+</Accordion>
+
+<Accordion title="Is there a community or forum?">
+Yes! Join discussions on:
+- [GitHub Discussions](https://github.com/Finsys/dockhand/discussions)
+- Share feedback and feature requests
+- Connect with other users
+</Accordion>
+
+<Accordion title="How can I support Dockhand development?">
+You can support Dockhand by:
+- Using it and providing feedback
+- Contributing code or documentation
+- Reporting bugs
+- Sharing with others
+- [Buy me a coffee](https://buymeacoffee.com/dockhand)
+</Accordion>

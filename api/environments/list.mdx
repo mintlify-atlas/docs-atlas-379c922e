@@ -1,0 +1,238 @@
+---
+title: "List Environments"
+api: "GET /api/environments"
+description: "Retrieve all Docker environments configured in Dockhand"
+---
+
+## Description
+
+Retrieves a list of all Docker environments. In Enterprise mode with authentication enabled, results are filtered based on the user's accessible environments unless the user is an admin.
+
+## Authentication
+
+Requires `environments:view` permission when authentication is enabled.
+
+## Response
+
+Returns an array of environment objects with parsed labels, public IPs, and additional settings.
+
+### Environment Object
+
+<ResponseField name="id" type="number" required>
+  Unique identifier for the environment
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Display name of the environment
+</ResponseField>
+
+<ResponseField name="host" type="string">
+  Hostname or IP address for remote Docker connections (required for `direct` and `hawser-standard` types)
+</ResponseField>
+
+<ResponseField name="port" type="number" default="2375">
+  Port number for Docker API connection
+</ResponseField>
+
+<ResponseField name="protocol" type="string" default="http">
+  Connection protocol: `http` or `https`
+</ResponseField>
+
+<ResponseField name="connectionType" type="string" default="socket">
+  Type of Docker connection:
+  - `socket` - Local Unix socket
+  - `direct` - Direct TCP connection to Docker API
+  - `hawser-standard` - HTTP proxy via Hawser agent
+  - `hawser-edge` - WebSocket reverse proxy via Hawser agent
+</ResponseField>
+
+<ResponseField name="socketPath" type="string" default="/var/run/docker.sock">
+  Unix socket path (used when `connectionType` is `socket`)
+</ResponseField>
+
+<ResponseField name="tlsCa" type="string">
+  TLS Certificate Authority (CA) certificate in PEM format
+</ResponseField>
+
+<ResponseField name="tlsCert" type="string">
+  TLS client certificate in PEM format
+</ResponseField>
+
+<ResponseField name="tlsKey" type="string">
+  TLS client private key in PEM format
+</ResponseField>
+
+<ResponseField name="tlsSkipVerify" type="boolean" default="false">
+  Skip TLS certificate verification (insecure, not recommended for production)
+</ResponseField>
+
+<ResponseField name="hawserToken" type="string">
+  Authentication token for `hawser-standard` connections
+</ResponseField>
+
+<ResponseField name="hawserLastSeen" type="string">
+  ISO 8601 timestamp of last connection from Hawser Edge agent
+</ResponseField>
+
+<ResponseField name="hawserAgentId" type="string">
+  Unique identifier of the connected Hawser Edge agent
+</ResponseField>
+
+<ResponseField name="hawserAgentName" type="string">
+  Name of the connected Hawser Edge agent
+</ResponseField>
+
+<ResponseField name="hawserVersion" type="string">
+  Version of the Hawser agent software
+</ResponseField>
+
+<ResponseField name="hawserCapabilities" type="string[]">
+  JSON array of agent capabilities: `["compose", "exec", "metrics"]`
+</ResponseField>
+
+<ResponseField name="icon" type="string" default="globe">
+  Icon identifier for UI display
+</ResponseField>
+
+<ResponseField name="collectActivity" type="boolean" default="true">
+  Enable collection of container activity events
+</ResponseField>
+
+<ResponseField name="collectMetrics" type="boolean" default="true">
+  Enable collection of host metrics
+</ResponseField>
+
+<ResponseField name="highlightChanges" type="boolean" default="true">
+  Highlight recent changes in the UI
+</ResponseField>
+
+<ResponseField name="labels" type="string[]">
+  Array of label strings for categorization (max 10 labels)
+</ResponseField>
+
+<ResponseField name="publicIp" type="string | null">
+  Public IP address of the environment host
+</ResponseField>
+
+<ResponseField name="updateCheckEnabled" type="boolean">
+  Whether automatic update checking is enabled
+</ResponseField>
+
+<ResponseField name="updateCheckAutoUpdate" type="boolean">
+  Whether automatic updates are enabled
+</ResponseField>
+
+<ResponseField name="imagePruneEnabled" type="boolean">
+  Whether automatic image pruning is enabled
+</ResponseField>
+
+<ResponseField name="timezone" type="string | null">
+  Timezone identifier for the environment
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of environment creation
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+## Example Response
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Production",
+    "host": "prod-docker.example.com",
+    "port": 2376,
+    "protocol": "https",
+    "connectionType": "direct",
+    "socketPath": "/var/run/docker.sock",
+    "tlsCa": "-----BEGIN CERTIFICATE-----\n...",
+    "tlsCert": "-----BEGIN CERTIFICATE-----\n...",
+    "tlsKey": "-----BEGIN PRIVATE KEY-----\n...",
+    "tlsSkipVerify": false,
+    "icon": "server",
+    "collectActivity": true,
+    "collectMetrics": true,
+    "highlightChanges": true,
+    "labels": ["production", "us-east-1"],
+    "publicIp": "203.0.113.42",
+    "updateCheckEnabled": true,
+    "updateCheckAutoUpdate": false,
+    "imagePruneEnabled": true,
+    "timezone": "America/New_York",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-20T14:22:00.000Z"
+  },
+  {
+    "id": 2,
+    "name": "Local Development",
+    "connectionType": "socket",
+    "socketPath": "/var/run/docker.sock",
+    "port": 2375,
+    "protocol": "http",
+    "tlsSkipVerify": false,
+    "icon": "laptop",
+    "collectActivity": true,
+    "collectMetrics": true,
+    "highlightChanges": true,
+    "labels": ["development"],
+    "publicIp": null,
+    "updateCheckEnabled": false,
+    "updateCheckAutoUpdate": false,
+    "imagePruneEnabled": false,
+    "timezone": null,
+    "createdAt": "2024-01-10T09:15:00.000Z",
+    "updatedAt": "2024-01-10T09:15:00.000Z"
+  },
+  {
+    "id": 3,
+    "name": "Edge Server",
+    "connectionType": "hawser-edge",
+    "port": 2375,
+    "protocol": "http",
+    "socketPath": "/var/run/docker.sock",
+    "tlsSkipVerify": false,
+    "icon": "cloud",
+    "collectActivity": true,
+    "collectMetrics": true,
+    "highlightChanges": true,
+    "labels": ["edge", "remote"],
+    "publicIp": null,
+    "updateCheckEnabled": false,
+    "updateCheckAutoUpdate": false,
+    "imagePruneEnabled": false,
+    "timezone": "UTC",
+    "hawserLastSeen": "2024-01-20T15:30:00.000Z",
+    "hawserAgentId": "edge-agent-001",
+    "hawserAgentName": "Edge Agent 1",
+    "hawserVersion": "1.2.0",
+    "hawserCapabilities": ["compose", "exec", "metrics"],
+    "createdAt": "2024-01-18T12:00:00.000Z",
+    "updatedAt": "2024-01-20T15:30:00.000Z"
+  }
+]
+```
+
+## Error Responses
+
+<ResponseField name="403 Forbidden" type="object">
+  User lacks `environments:view` permission
+  ```json
+  {
+    "error": "Permission denied"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error" type="object">
+  Failed to retrieve environments
+  ```json
+  {
+    "error": "Failed to get environments"
+  }
+  ```
+</ResponseField>

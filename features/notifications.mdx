@@ -1,0 +1,708 @@
+---
+title: 'Notifications'
+description: 'Configure alerts and notifications for container events, updates, and system activities'
+icon: 'bell'
+---
+
+## Overview
+
+Dockhand's notification system sends real-time alerts for container events, auto-updates, Git syncs, and system activities. Configure multiple notification channels with flexible event filtering and environment-specific routing.
+
+## Notification Types
+
+Dockhand supports two primary notification methods:
+
+### SMTP Email
+
+Send notifications via email using any SMTP server:
+
+```typescript
+interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  username?: string;
+  password?: string;
+  from_email: string;
+  to_emails: string[];
+}
+```
+
+### Apprise
+
+Support for 80+ notification services via Apprise:
+
+```typescript
+interface AppriseConfig {
+  urls: string[];  // Apprise URL format
+}
+```
+
+Supported services include:
+- Slack
+- Discord
+- Microsoft Teams
+- Telegram
+- PagerDuty
+- Pushover
+- Ntfy
+- Gotify
+- And 70+ more
+
+## Configuration
+
+### Creating a Notification Setting
+
+```bash
+POST /api/notifications
+```
+
+#### SMTP Example
+
+```json
+{
+  "type": "smtp",
+  "name": "Production Alerts",
+  "enabled": true,
+  "config": {
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "secure": false,
+    "username": "alerts@company.com",
+    "password": "app-specific-password",
+    "from_email": "dockhand@company.com",
+    "to_emails": ["ops@company.com", "devops@company.com"]
+  },
+  "eventTypes": [
+    "container_stopped",
+    "auto_update_failed",
+    "git_sync_failed"
+  ]
+}
+```
+
+#### Apprise Example (Slack)
+
+```json
+{
+  "type": "apprise",
+  "name": "Slack Notifications",
+  "enabled": true,
+  "config": {
+    "urls": [
+      "slack://TokenA/TokenB/TokenC/#channel"
+    ]
+  },
+  "eventTypes": [
+    "auto_update_success",
+    "git_sync_success",
+    "container_unhealthy"
+  ]
+}
+```
+
+#### Apprise Example (Multiple Services)
+
+```json
+{
+  "type": "apprise",
+  "name": "Multi-Channel Alerts",
+  "enabled": true,
+  "config": {
+    "urls": [
+      "discord://webhook_id/webhook_token",
+      "telegram://bot_token/chat_id",
+      "ntfy://topic"
+    ]
+  },
+  "eventTypes": ["all"]
+}
+```
+
+## Event Types
+
+### Container Events
+
+```typescript
+type ContainerEventType =
+  | 'container_started'
+  | 'container_stopped'
+  | 'container_restarted'
+  | 'container_created'
+  | 'container_removed'
+  | 'container_unhealthy'
+  | 'container_healthy';
+```
+
+### Auto-Update Events
+
+```typescript
+type AutoUpdateEventType =
+  | 'auto_update_success'
+  | 'auto_update_failed'
+  | 'auto_update_blocked';
+```
+
+### Git Sync Events
+
+```typescript
+type GitSyncEventType =
+  | 'git_sync_success'
+  | 'git_sync_failed'
+  | 'git_sync_skipped';
+```
+
+### System Events
+
+```typescript
+type SystemEventType =
+  | 'system_error'
+  | 'system_warning'
+  | 'backup_completed'
+  | 'cleanup_completed';
+```
+
+## Environment-Specific Notifications
+
+### Global Notifications
+
+Apply to all environments:
+
+```json
+{
+  "name": "Global Alerts",
+  "eventTypes": ["auto_update_failed", "git_sync_failed"]
+}
+```
+
+### Per-Environment Configuration
+
+Override global settings for specific environments:
+
+```bash
+POST /api/environments/{id}/notifications
+```
+
+```json
+{
+  "notificationId": 1,
+  "enabled": true,
+  "eventTypes": [
+    "container_stopped",
+    "container_unhealthy"
+  ]
+}
+```
+
+### Database Schema
+
+```typescript:src/lib/server/db/schema/pg-schema.ts
+export const notificationSettings = pgTable('notification_settings', {
+  id: serial('id').primaryKey(),
+  type: text('type').notNull(),
+  name: text('name').notNull(),
+  enabled: boolean('enabled').default(true),
+  config: text('config').notNull(),
+  eventTypes: text('event_types'),
+  createdAt: timestamp('created_at', { mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'string' }).defaultNow()
+});
+
+export const environmentNotifications = pgTable('environment_notifications', {
+  id: serial('id').primaryKey(),
+  environmentId: integer('environment_id').notNull().references(() => environments.id, { onDelete: 'cascade' }),
+  notificationId: integer('notification_id').notNull().references(() => notificationSettings.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').default(true),
+  eventTypes: text('event_types'),
+  createdAt: timestamp('created_at', { mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'string' }).defaultNow()
+}, (table) => ({
+  envNotifUnique: unique().on(table.environmentId, table.notificationId)
+}));
+```
+
+## Sending Notifications
+
+### Programmatic Notifications
+
+From within Dockhand code:
+
+```typescript:src/lib/server/scheduler/tasks/git-stack-sync.ts
+import { sendEventNotification } from '$lib/server/notifications';
+
+// Send success notification
+await sendEventNotification('git_sync_success', {
+  title: 'Git stack deployed',
+  message: `Stack "${stackName}" was synced and deployed successfully`,
+  type: 'success'
+}, envId);
+
+// Send failure notification
+await sendEventNotification('git_sync_failed', {
+  title: 'Git sync failed',
+  message: `Stack "${stackName}" sync failed: ${error.message}`,
+  type: 'error'
+}, envId);
+```
+
+### Container Update Notifications
+
+```typescript:src/lib/server/scheduler/tasks/container-update.ts
+// Update blocked by vulnerability scan
+await sendEventNotification('auto_update_blocked', {
+  title: 'Auto-update blocked',
+  message: `Container "${containerName}" update blocked: ${scanOutcome.reason}`,
+  type: 'warning'
+}, envId);
+
+// Update successful
+await sendEventNotification('auto_update_success', {
+  title: 'Container auto-updated',
+  message: `Container "${containerName}" was updated to a new image version`,
+  type: 'success'
+}, envId);
+
+// Update failed
+await sendEventNotification('auto_update_failed', {
+  title: 'Auto-update failed',
+  message: `Container "${containerName}" auto-update failed: ${error.message}`,
+  type: 'error'
+}, envId);
+```
+
+## Testing Notifications
+
+### Test Individual Setting
+
+```bash
+POST /api/notifications/{id}/test
+```
+
+Sends a test notification:
+
+```json
+{
+  "title": "Dockhand Test Notification",
+  "message": "This is a test notification from Dockhand. If you received this, your notification settings are working correctly.",
+  "type": "info"
+}
+```
+
+### Test All Notifications
+
+```bash
+POST /api/notifications/test
+```
+
+Tests all enabled notification settings and returns results:
+
+```json
+{
+  "tested": 3,
+  "results": [
+    {
+      "id": 1,
+      "name": "Production Alerts",
+      "success": true
+    },
+    {
+      "id": 2,
+      "name": "Slack Notifications",
+      "success": true
+    },
+    {
+      "id": 3,
+      "name": "Discord Alerts",
+      "success": false,
+      "error": "Invalid webhook token"
+    }
+  ]
+}
+```
+
+### Trigger Test Event
+
+```bash
+POST /api/notifications/trigger-test
+```
+
+```json
+{
+  "eventType": "container_stopped",
+  "environmentId": 1,
+  "title": "Test: Container Stopped",
+  "message": "This is a test of the container_stopped event"
+}
+```
+
+## SMTP Configuration Examples
+
+### Gmail
+
+```json
+{
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "secure": false,
+  "username": "your-email@gmail.com",
+  "password": "your-app-specific-password",
+  "from_email": "dockhand@gmail.com",
+  "to_emails": ["recipient@example.com"]
+}
+```
+
+**Note**: Gmail requires an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password.
+
+### Office 365
+
+```json
+{
+  "host": "smtp.office365.com",
+  "port": 587,
+  "secure": false,
+  "username": "your-email@company.com",
+  "password": "your-password",
+  "from_email": "dockhand@company.com",
+  "to_emails": ["ops@company.com"]
+}
+```
+
+### SendGrid
+
+```json
+{
+  "host": "smtp.sendgrid.net",
+  "port": 587,
+  "secure": false,
+  "username": "apikey",
+  "password": "SG.your-api-key",
+  "from_email": "noreply@company.com",
+  "to_emails": ["alerts@company.com"]
+}
+```
+
+### Mailgun
+
+```json
+{
+  "host": "smtp.mailgun.org",
+  "port": 587,
+  "secure": false,
+  "username": "postmaster@mg.company.com",
+  "password": "your-smtp-password",
+  "from_email": "dockhand@mg.company.com",
+  "to_emails": ["team@company.com"]
+}
+```
+
+## Apprise URL Formats
+
+### Slack
+
+```
+slack://TokenA/TokenB/TokenC/#channel
+slack://TokenA/TokenB/TokenC/#channel1/#channel2
+```
+
+### Discord
+
+```
+discord://webhook_id/webhook_token
+```
+
+### Microsoft Teams
+
+```
+msteams://TokenA/TokenB/TokenC/
+```
+
+### Telegram
+
+```
+telegram://bot_token/chat_id
+telegram://bot_token/?channels=@channel
+```
+
+### PagerDuty
+
+```
+pagerduty://integration_key@subdomain
+```
+
+### Pushover
+
+```
+pushover://user_key@token
+```
+
+### Ntfy
+
+```
+ntfy://topic
+ntfy://username:password@topic
+ntfys://topic  # HTTPS
+```
+
+### Gotify
+
+```
+gotify://hostname/token
+gotifys://hostname/token  # HTTPS
+```
+
+### Matrix
+
+```
+matrix://user:token@hostname/#room
+matrix://user:token@hostname/#room1/#room2
+```
+
+### Webhook
+
+```
+json://hostname/path
+jsons://hostname/path  # HTTPS
+```
+
+For a complete list of supported services and URL formats, see the [Apprise documentation](https://github.com/caronc/apprise/wiki).
+
+## Notification Message Format
+
+### Message Structure
+
+```typescript
+interface NotificationMessage {
+  title: string;
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  timestamp?: string;
+  environment?: string;
+  details?: Record<string, any>;
+}
+```
+
+### Example Messages
+
+#### Container Update Success
+
+```
+Title: Container auto-updated
+Message: Container "nginx" was updated to a new image version
+Type: success
+Environment: production
+Details:
+  - Container: nginx
+  - Old Image: nginx:1.24.0
+  - New Image: nginx:1.25.0
+  - Duration: 45s
+```
+
+#### Git Sync Failure
+
+```
+Title: Git sync failed
+Message: Stack "production-app" sync failed: Authentication failed
+Type: error
+Environment: production
+Details:
+  - Stack: production-app
+  - Repository: github.com/company/app
+  - Branch: main
+  - Error: Authentication failed
+```
+
+## Event Filtering
+
+### Filter by Event Type
+
+Only receive specific events:
+
+```json
+{
+  "eventTypes": [
+    "auto_update_failed",
+    "git_sync_failed",
+    "container_unhealthy"
+  ]
+}
+```
+
+### Filter by Severity
+
+Group events by severity:
+
+```json
+{
+  "critical": {
+    "eventTypes": [
+      "auto_update_failed",
+      "git_sync_failed",
+      "container_unhealthy"
+    ],
+    "config": {
+      "urls": ["pagerduty://integration_key@subdomain"]
+    }
+  },
+  "info": {
+    "eventTypes": [
+      "auto_update_success",
+      "git_sync_success"
+    ],
+    "config": {
+      "urls": ["slack://TokenA/TokenB/TokenC/#updates"]
+    }
+  }
+}
+```
+
+### Filter by Environment
+
+Different notifications for different environments:
+
+```typescript
+// Production: PagerDuty for failures
+{
+  "environmentId": 1,
+  "notificationId": 1,  // PagerDuty
+  "eventTypes": ["auto_update_failed", "git_sync_failed"]
+}
+
+// Staging: Slack for all events
+{
+  "environmentId": 2,
+  "notificationId": 2,  // Slack
+  "eventTypes": ["all"]
+}
+
+// Development: Email digest
+{
+  "environmentId": 3,
+  "notificationId": 3,  // Email
+  "eventTypes": ["auto_update_success", "git_sync_success"]
+}
+```
+
+## Best Practices
+
+### Alert Fatigue Prevention
+
+1. **Filter by severity**: Only send critical alerts to PagerDuty
+2. **Group similar events**: Batch notifications instead of sending each event
+3. **Use appropriate channels**: Slack for info, PagerDuty for critical
+4. **Configure quiet hours**: Reduce non-critical alerts during off-hours
+
+### Security
+
+1. **Protect credentials**: SMTP passwords are encrypted in the database
+2. **Use app passwords**: For services like Gmail
+3. **Rotate tokens**: Regularly update webhook URLs and API keys
+4. **Limit recipients**: Only send to authorized personnel
+5. **Test regularly**: Ensure notifications are working
+
+### Reliability
+
+1. **Configure multiple channels**: Backup notification methods
+2. **Test on setup**: Always test new notification settings
+3. **Monitor delivery**: Check for failed notification attempts
+4. **Set timeouts**: Prevent hanging on unresponsive services
+
+### Message Quality
+
+```typescript
+// Good: Specific and actionable
+{
+  "title": "Production container nginx is unhealthy",
+  "message": "Health check failing for 5 minutes. Last check output: Connection refused on port 80"
+}
+
+// Bad: Vague and unhelpful
+{
+  "title": "Error",
+  "message": "Something went wrong"
+}
+```
+
+## Troubleshooting
+
+### SMTP Issues
+
+#### Authentication Failed
+```
+Error: Invalid login credentials
+Solution: Use app-specific password for Gmail/Yahoo
+```
+
+#### Connection Timeout
+```
+Error: Connection timeout
+Solution: Check firewall rules, ensure SMTP port is accessible
+```
+
+#### TLS Errors
+```
+Error: Certificate verification failed
+Solution: Set "secure": false for STARTTLS (port 587)
+```
+
+### Apprise Issues
+
+#### Invalid URL Format
+```
+Error: Invalid Apprise URL
+Solution: Verify URL format matches service requirements
+```
+
+#### Webhook Not Found
+```
+Error: Webhook not found (404)
+Solution: Regenerate webhook in service and update Dockhand config
+```
+
+### Debugging
+
+Enable notification debugging:
+
+```bash
+# Check notification logs
+GET /api/notifications/logs?limit=50
+
+# Test specific notification
+POST /api/notifications/{id}/test
+
+# Verify configuration
+GET /api/notifications/{id}
+```
+
+## API Reference
+
+```bash
+# List notifications
+GET /api/notifications
+
+# Create notification
+POST /api/notifications
+
+# Update notification
+PUT /api/notifications/{id}
+
+# Delete notification
+DELETE /api/notifications/{id}
+
+# Test notification
+POST /api/notifications/{id}/test
+
+# Test all notifications
+POST /api/notifications/test
+
+# Trigger test event
+POST /api/notifications/trigger-test
+
+# Get notification logs
+GET /api/notifications/logs
+
+# Environment notifications
+GET /api/environments/{id}/notifications
+POST /api/environments/{id}/notifications
+PUT /api/environments/{id}/notifications/{notificationId}
+DELETE /api/environments/{id}/notifications/{notificationId}
+```

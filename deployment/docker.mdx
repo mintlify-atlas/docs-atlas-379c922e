@@ -1,0 +1,301 @@
+---
+title: Docker Deployment
+description: Run Dockhand with Docker
+icon: docker
+---
+
+## Quick Start
+
+Pull and run the latest Dockhand image:
+
+```bash
+docker run -d \
+  --name dockhand \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+Access Dockhand at `http://localhost:3000`
+
+## Image Details
+
+The official Dockhand Docker image is based on a security-hardened [Wolfi](https://wolfi.dev) OS with minimal attack surface:
+
+- **Base OS**: Custom Wolfi (built with apko)
+- **Runtime**: Node.js 24 (from official node:24-slim)
+- **Architecture**: Multi-arch (amd64, arm64)
+- **Size**: ~350MB
+- **User**: Non-root by default (UID 1001)
+
+### Pre-installed Tools
+
+The image includes these packages:
+
+- `docker-cli` - Docker command-line client
+- `docker-compose` - Docker Compose V2
+- `docker-cli-buildx` - Docker Buildx plugin
+- `sqlite` - SQLite database (default database)
+- `postgresql-client` - PostgreSQL client (for external databases)
+- `git` - Git version control
+- `openssh-client` + `openssh-keygen` - SSH support for Git
+- `curl` - HTTP client for health checks
+
+## Configuration
+
+### Port Mapping
+
+Dockhand listens on port 3000 by default. Change the host port:
+
+```bash
+docker run -d \
+  -p 8080:3000 \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+### Data Persistence
+
+Mount a volume or bind mount to persist data:
+
+**Named volume** (recommended):
+```bash
+-v dockhand_data:/app/data
+```
+
+**Bind mount**:
+```bash
+-v /host/path/to/data:/app/data
+```
+
+The data directory contains:
+- `db/` - SQLite database (if not using PostgreSQL)
+- `stacks/` - Compose file backups
+- `git-repos/` - Cloned Git repositories
+- `scanner-cache/` - Vulnerability scanner databases
+- `tmp/` - Temporary files (TLS certificates, etc.)
+
+### Docker Socket
+
+Dockhand requires access to the Docker socket to manage containers:
+
+```bash
+-v /var/run/docker.sock:/var/run/docker.sock
+```
+
+<Warning>
+  Mounting the Docker socket gives Dockhand full control over Docker. Only expose Dockhand to trusted users.
+</Warning>
+
+### User and Permissions
+
+#### Default User (UID 1001)
+
+By default, Dockhand runs as user `dockhand` (UID 1001, GID 1001). The entrypoint automatically adds this user to the Docker socket's group.
+
+#### Custom UID/GID
+
+Change the user ID at runtime:
+
+```bash
+docker run -d \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+#### Run as Root
+
+To run as root:
+
+```bash
+docker run -d \
+  -e PUID=0 \
+  -e PGID=0 \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+#### User Directive (Rootless)
+
+Use Docker's `user:` directive:
+
+```bash
+docker run -d \
+  --user 1000:1000 \
+  --group-add $(stat -c '%g' /var/run/docker.sock) \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+<Note>
+  When using `--user`, you must manually add the Docker socket group with `--group-add`.
+</Note>
+
+### Environment Variables
+
+See [Environment Variables](/deployment/environment-variables) for a complete list.
+
+## Health Check
+
+The image includes a built-in health check:
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/ || exit 1
+```
+
+Check container health:
+
+```bash
+docker inspect --format='{{.State.Health.Status}}' dockhand
+```
+
+## Resource Limits
+
+Set memory and CPU limits:
+
+```bash
+docker run -d \
+  --memory=512m \
+  --cpus=1 \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+## Networking
+
+### Bridge Network (Default)
+
+Default bridge network allows container communication:
+
+```bash
+docker run -d \
+  --network bridge \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+### Custom Network
+
+Create a custom network:
+
+```bash
+docker network create dockhand-net
+
+docker run -d \
+  --network dockhand-net \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+### Host Network
+
+Use host networking (not recommended for security):
+
+```bash
+docker run -d \
+  --network host \
+  -e PORT=3000 \
+  # ... other options
+  fnsys/dockhand:latest
+```
+
+## Updates
+
+Update to the latest version:
+
+```bash
+# Pull latest image
+docker pull fnsys/dockhand:latest
+
+# Stop and remove old container
+docker stop dockhand
+docker rm dockhand
+
+# Start new container
+docker run -d \
+  --name dockhand \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v dockhand_data:/app/data \
+  fnsys/dockhand:latest
+```
+
+<Tip>
+  Dockhand supports self-update from the web UI (Settings > System > Self-Update).
+</Tip>
+
+## Emergency Scripts
+
+The image includes emergency scripts for recovery:
+
+```bash
+# Reset database
+docker exec dockhand /app/scripts/emergency/reset-db.sh
+
+# Clear cache
+docker exec dockhand /app/scripts/emergency/clear-cache.sh
+```
+
+## Logs
+
+View container logs:
+
+```bash
+# Follow logs
+docker logs -f dockhand
+
+# Last 100 lines
+docker logs --tail 100 dockhand
+
+# Logs since timestamp
+docker logs --since 2024-01-01T00:00:00 dockhand
+```
+
+## Troubleshooting
+
+### Permission Denied on Docker Socket
+
+If you see "permission denied" errors:
+
+1. Check socket permissions:
+   ```bash
+   ls -la /var/run/docker.sock
+   ```
+
+2. Add user to docker group:
+   ```bash
+   docker exec dockhand sh -c 'addgroup dockhand $(stat -c %g /var/run/docker.sock)'
+   ```
+
+3. Restart container:
+   ```bash
+   docker restart dockhand
+   ```
+
+### Container Won't Start
+
+Check logs for errors:
+```bash
+docker logs dockhand
+```
+
+Common issues:
+- Port 3000 already in use (change with `-p 8080:3000`)
+- Data volume permissions (fix with `chown -R 1001:1001 /path/to/data`)
+- Docker socket not mounted
+
+### Database Locked
+
+If using SQLite and seeing "database locked" errors:
+
+1. Stop Dockhand
+2. Check for other processes accessing the database
+3. Restart Dockhand
+
+For production, consider [PostgreSQL](/deployment/database#postgresql).

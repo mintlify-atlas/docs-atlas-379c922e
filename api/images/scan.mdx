@@ -1,0 +1,434 @@
+---
+title: 'Scan Image'
+description: 'Run vulnerability scans on Docker images using Grype or Trivy'
+icon: 'shield-check'
+---
+
+## Overview
+
+Perform security vulnerability scans on Docker images using integrated scanners (Grype or Trivy). Results are saved to the database and can be retrieved for historical analysis.
+
+## Endpoint
+
+```bash
+POST /api/images/scan?env={environmentId}
+```
+
+## Query Parameters
+
+<ParamField query="env" type="integer">
+  Environment ID containing the image to scan. Optional for local environments.
+</ParamField>
+
+## Request Body
+
+<ParamField body="imageName" type="string" required>
+  Image name or ID to scan:
+  - `nginx:latest`
+  - `ubuntu:22.04`
+  - `sha256:abc123...`
+</ParamField>
+
+<ParamField body="scanner" type="string">
+  Force specific scanner: `grype` or `trivy`. If not specified, uses environment scanner settings.
+</ParamField>
+
+## Authentication
+
+Requires `images:inspect` permission for the specified environment.
+
+## Response Format
+
+Returns job ID for progress tracking:
+
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+For synchronous requests with `Accept: application/json`, returns scan results directly.
+
+## Progress Events
+
+### Scanning Stage
+
+```json
+{
+  "stage": "scanning",
+  "message": "Running Grype scanner...",
+  "progress": 0
+}
+```
+
+### Analyzing Stage
+
+```json
+{
+  "stage": "analyzing",
+  "message": "Analyzing image layers",
+  "progress": 45
+}
+```
+
+### Processing Stage
+
+```json
+{
+  "stage": "processing",
+  "message": "Processing vulnerability data",
+  "progress": 75
+}
+```
+
+### Complete
+
+```json
+{
+  "stage": "complete",
+  "message": "Scan complete - found 12 vulnerabilities",
+  "progress": 100,
+  "result": {
+    "imageId": "sha256:abc123...",
+    "imageName": "nginx:latest",
+    "scanner": "grype",
+    "scannedAt": "2024-03-04T10:30:00Z",
+    "scanDuration": 8500,
+    "summary": {
+      "critical": 0,
+      "high": 2,
+      "medium": 5,
+      "low": 5,
+      "negligible": 0,
+      "unknown": 0
+    },
+    "vulnerabilities": [
+      {
+        "id": "CVE-2024-1234",
+        "severity": "high",
+        "package": "openssl",
+        "version": "1.1.1",
+        "fixedVersion": "1.1.1w",
+        "description": "Buffer overflow vulnerability in OpenSSL",
+        "urls": [
+          "https://nvd.nist.gov/vuln/detail/CVE-2024-1234"
+        ]
+      }
+    ]
+  },
+  "results": [
+    // Array of all scanner results (if multiple scanners configured)
+  ]
+}
+```
+
+### Error
+
+```json
+{
+  "stage": "error",
+  "message": "Scan failed: Scanner not available",
+  "error": "Scanner not available"
+}
+```
+
+## Scan Result Schema
+
+<ResponseField name="imageId" type="string">
+  Image identifier (SHA256 hash)
+</ResponseField>
+
+<ResponseField name="imageName" type="string">
+  Human-readable image name with tag
+</ResponseField>
+
+<ResponseField name="scanner" type="string">
+  Scanner used: `grype` or `trivy`
+</ResponseField>
+
+<ResponseField name="scannedAt" type="string">
+  ISO 8601 timestamp when scan completed
+</ResponseField>
+
+<ResponseField name="scanDuration" type="integer">
+  Scan duration in milliseconds
+</ResponseField>
+
+<ResponseField name="summary" type="object">
+  Vulnerability count by severity:
+  - `critical`: Critical severity (CVSS 9.0-10.0)
+  - `high`: High severity (CVSS 7.0-8.9)
+  - `medium`: Medium severity (CVSS 4.0-6.9)
+  - `low`: Low severity (CVSS 0.1-3.9)
+  - `negligible`: Negligible/informational
+  - `unknown`: Unknown severity
+</ResponseField>
+
+<ResponseField name="vulnerabilities" type="array">
+  Array of vulnerability objects
+</ResponseField>
+
+### Vulnerability Object
+
+<ResponseField name="id" type="string">
+  CVE identifier or vendor-specific ID
+</ResponseField>
+
+<ResponseField name="severity" type="string">
+  Severity level: `critical`, `high`, `medium`, `low`, `negligible`, `unknown`
+</ResponseField>
+
+<ResponseField name="package" type="string">
+  Affected package name
+</ResponseField>
+
+<ResponseField name="version" type="string">
+  Installed package version
+</ResponseField>
+
+<ResponseField name="fixedVersion" type="string">
+  Version containing the fix (if available)
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Vulnerability description
+</ResponseField>
+
+<ResponseField name="urls" type="string[]">
+  Reference URLs for more information
+</ResponseField>
+
+## Implementation
+
+```typescript:src/routes/api/images/scan/+server.ts
+export const POST: RequestHandler = async ({ request, url, cookies }) => {
+  const auth = await authorize(cookies);
+  const envId = url.searchParams.get('env') ? parseInt(url.searchParams.get('env')!) : undefined;
+  
+  // Permission check (Scanning is an inspect operation)
+  if (auth.authEnabled && !await auth.can('images', 'inspect', envId)) {
+    return json({ error: 'Permission denied' }, { status: 403 });
+  }
+  
+  const { imageName, scanner: forceScannerType } = await request.json();
+  
+  return createJobResponse(async (send) => {
+    const sendProgress = (progress: ScanProgress) => {
+      send('progress', progress);
+    };
+    
+    try {
+      const results = await scanImage(imageName, envId, sendProgress, forceScannerType);
+      
+      // Save results to database
+      for (const result of results) {
+        await saveVulnerabilityScan(scanResultToDbFormat(result, envId));
+      }
+      
+      const completeProgress: ScanProgress = {
+        stage: 'complete',
+        message: `Scan complete - found ${results.reduce((sum, r) => sum + r.vulnerabilities.length, 0)} vulnerabilities`,
+        progress: 100,
+        result: results[0],
+        results: results
+      };
+      send('result', completeProgress);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      send('result', {
+        stage: 'error',
+        message: `Scan failed: ${errorMsg}`,
+        error: errorMsg
+      });
+    }
+  }, request);
+};
+```
+
+## Retrieve Cached Results
+
+Get the latest scan results for an image without running a new scan:
+
+```bash
+GET /api/images/scan?image={imageName}&env={environmentId}&scanner={scannerType}
+```
+
+### Query Parameters
+
+<ParamField query="image" type="string" required>
+  Image name or ID
+</ParamField>
+
+<ParamField query="env" type="integer">
+  Environment ID
+</ParamField>
+
+<ParamField query="scanner" type="string">
+  Filter by scanner: `grype` or `trivy`
+</ParamField>
+
+### Response
+
+```json
+{
+  "found": true,
+  "result": {
+    "imageId": "sha256:abc123...",
+    "imageName": "nginx:latest",
+    "scanner": "grype",
+    "scannedAt": "2024-03-04T10:30:00Z",
+    "summary": { /* ... */ },
+    "vulnerabilities": [ /* ... */ ]
+  }
+}
+```
+
+If no cached results exist:
+
+```json
+{
+  "found": false
+}
+```
+
+## Usage Examples
+
+### Scan with Default Scanner
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/images/scan?env=1' \
+  -H 'Content-Type: application/json' \
+  -H 'Cookie: session=...' \
+  -d '{
+    "imageName": "nginx:latest"
+  }'
+```
+
+### Force Specific Scanner
+
+```bash
+curl -X POST 'https://dockhand.example.com/api/images/scan?env=1' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "imageName": "ubuntu:22.04",
+    "scanner": "trivy"
+  }'
+```
+
+### Get Cached Results
+
+```bash
+curl -X GET 'https://dockhand.example.com/api/images/scan?image=nginx:latest&env=1&scanner=grype' \
+  -H 'Cookie: session=...'
+```
+
+### Stream Progress (JavaScript)
+
+```typescript
+const response = await fetch('/api/images/scan?env=1', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ imageName: 'nginx:latest' })
+});
+
+const { jobId } = await response.json();
+
+const eventSource = new EventSource(`/api/jobs/${jobId}`);
+eventSource.addEventListener('progress', (e) => {
+  const progress = JSON.parse(e.data);
+  console.log(`[${progress.stage}] ${progress.message} - ${progress.progress}%`);
+});
+
+eventSource.addEventListener('result', (e) => {
+  const result = JSON.parse(e.data);
+  if (result.stage === 'complete') {
+    console.log('Vulnerabilities found:', result.result.vulnerabilities.length);
+    console.log('Summary:', result.result.summary);
+  }
+  eventSource.close();
+});
+```
+
+### Filter Critical Vulnerabilities
+
+```typescript
+const response = await fetch('/api/images/scan?image=nginx:latest&env=1');
+const data = await response.json();
+
+if (data.found) {
+  const critical = data.result.vulnerabilities.filter(
+    vuln => vuln.severity === 'critical'
+  );
+  console.log(`Found ${critical.length} critical vulnerabilities`);
+}
+```
+
+## Supported Scanners
+
+### Grype
+
+Fast, accurate vulnerability scanner by Anchore:
+- Language-specific package scanning
+- OS package scanning
+- Database automatically updated
+- Supports offline scanning
+
+### Trivy
+
+Comprehensive security scanner by Aqua Security:
+- Vulnerability scanning
+- Misconfiguration detection
+- Secret detection
+- License scanning
+
+## Error Responses
+
+<ResponseField name="400" type="object">
+  Missing required parameter
+  ```json
+  { "error": "Image name is required" }
+  ```
+</ResponseField>
+
+<ResponseField name="403" type="object">
+  Permission denied
+  ```json
+  { "error": "Permission denied" }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="object">
+  Scan failed
+  ```json
+  { "error": "Failed to get scan results" }
+  ```
+</ResponseField>
+
+## Scan-on-Pull Integration
+
+Scans are automatically triggered when pulling images (if configured):
+
+```typescript
+const { scanner } = await getScannerSettings(envId);
+if (scanner !== 'none') {
+  const results = await scanImage(image, envId, (progress) => {
+    sendData({ status: 'scan-progress', ...progress });
+  });
+}
+```
+
+## Related Operations
+
+- [Pull Image](/api/images/pull) - Automatic scan-on-pull
+- [List Images](/api/images/list) - View available images
+- [Scanner Configuration](/features/security#vulnerability-scanning) - Configure scanner settings
+
+## Notes
+
+- Results are automatically saved to database
+- Multiple scanners can be configured simultaneously
+- Scan duration typically ranges from 5-30 seconds depending on image size
+- Progress events provide real-time feedback
+- Cached results can be retrieved without re-scanning
+- Scanner selection follows environment configuration
+- Scan-on-pull integration is automatic when scanner is configured

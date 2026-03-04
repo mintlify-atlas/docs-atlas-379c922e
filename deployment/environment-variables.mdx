@@ -1,0 +1,440 @@
+---
+title: Environment Variables
+description: Configuration options for Dockhand
+icon: gear
+---
+
+## Core Settings
+
+### PORT
+
+**Default**: `3000`
+
+HTTP server port.
+
+```bash
+PORT=8080
+```
+
+### HOST
+
+**Default**: `0.0.0.0`
+
+Bind address for the HTTP server.
+
+```bash
+HOST=127.0.0.1  # Localhost only
+HOST=0.0.0.0    # All interfaces
+```
+
+### NODE_ENV
+
+**Default**: `production`
+
+Node.js environment mode.
+
+```bash
+NODE_ENV=production
+NODE_ENV=development
+```
+
+### DATA_DIR
+
+**Default**: `/app/data` (Docker) or `./data` (local)
+
+Directory for persistent data (database, stacks, git repos, cache).
+
+```bash
+DATA_DIR=/custom/path/to/data
+```
+
+## User and Permissions
+
+### PUID
+
+**Default**: `1001`
+
+User ID for the Dockhand process (Docker only).
+
+```bash
+PUID=1000
+```
+
+### PGID
+
+**Default**: `1001`
+
+Group ID for the Dockhand process (Docker only).
+
+```bash
+PGID=1000
+```
+
+## Database
+
+### DATABASE_URL
+
+**Default**: SQLite at `$DATA_DIR/db/dockhand.db`
+
+PostgreSQL connection string. Omit to use SQLite.
+
+```bash
+DATABASE_URL=postgres://user:password@localhost:5432/dockhand
+DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
+```
+
+See [Database Configuration](/deployment/database) for details.
+
+### DB_FAIL_ON_MIGRATION_ERROR
+
+**Default**: `true`
+
+Exit immediately if database migrations fail.
+
+```bash
+DB_FAIL_ON_MIGRATION_ERROR=false  # Continue anyway (dangerous)
+```
+
+### DB_VERBOSE_LOGGING
+
+**Default**: `false`
+
+Enable verbose database logging.
+
+```bash
+DB_VERBOSE_LOGGING=true
+```
+
+### SKIP_MIGRATIONS
+
+**Default**: `false`
+
+Skip database migrations on startup (debugging only).
+
+```bash
+SKIP_MIGRATIONS=true
+```
+
+## Docker Connection
+
+### DOCKER_SOCKET
+
+**Default**: Auto-detected (`/var/run/docker.sock`)
+
+Path to the Docker socket.
+
+```bash
+DOCKER_SOCKET=/var/run/docker.sock
+DOCKER_SOCKET=/custom/path/to/docker.sock
+```
+
+### DOCKER_HOST
+
+**Default**: None
+
+Docker daemon connection URL.
+
+```bash
+DOCKER_HOST=unix:///var/run/docker.sock
+DOCKER_HOST=tcp://192.168.1.100:2375
+DOCKER_HOST=tcp://192.168.1.100:2376
+```
+
+### DOCKER_API_VERSION
+
+**Default**: Auto-negotiated
+
+Docker API version to use.
+
+```bash
+DOCKER_API_VERSION=1.43
+```
+
+### HOST_DATA_DIR
+
+**Default**: Auto-detected
+
+Host path to `DATA_DIR` for Docker bind mounts.
+
+```bash
+HOST_DATA_DIR=/host/path/to/data
+```
+
+### HOST_DOCKER_SOCKET
+
+**Default**: Auto-detected
+
+Host path to Docker socket for stack deployment.
+
+```bash
+HOST_DOCKER_SOCKET=/var/run/docker.sock
+```
+
+## Security
+
+### ENCRYPTION_KEY
+
+**Default**: Auto-generated and saved to `$DATA_DIR/.encryption_key`
+
+32-byte hex key for encrypting sensitive data (passwords, tokens, TLS keys).
+
+```bash
+ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+<Warning>
+  **Important**: Back up this key. If lost, encrypted data cannot be recovered.
+</Warning>
+
+Generate a new key:
+```bash
+openssl rand -hex 32
+```
+
+### COOKIE_SECURE
+
+**Default**: Auto-detected (HTTPS = true, HTTP = false)
+
+Force secure cookies.
+
+```bash
+COOKIE_SECURE=true   # Require HTTPS
+COOKIE_SECURE=false  # Allow HTTP
+```
+
+### DISABLE_LOCAL_LOGIN
+
+**Default**: `false`
+
+Disable local username/password login (force SSO).
+
+```bash
+DISABLE_LOCAL_LOGIN=true
+```
+
+## Hostname
+
+### DOCKHAND_HOSTNAME
+
+**Default**: Auto-detected from Docker API
+
+Hostname for license validation and display.
+
+```bash
+DOCKHAND_HOSTNAME=my-docker-host
+```
+
+### HOSTNAME
+
+**Default**: Container hostname
+
+Container hostname (used for host path detection).
+
+```bash
+HOSTNAME=dockhand-prod
+```
+
+## Performance
+
+### COMPOSE_TIMEOUT
+
+**Default**: `900` (15 minutes)
+
+Timeout in seconds for Docker Compose operations.
+
+```bash
+COMPOSE_TIMEOUT=1800  # 30 minutes
+```
+
+### SKIP_DF_COLLECTION
+
+**Default**: `false`
+
+Skip disk usage collection (use if `df` command is slow).
+
+```bash
+SKIP_DF_COLLECTION=true
+```
+
+### MEMORY_MONITOR
+
+**Default**: `false`
+
+Enable memory monitoring and heap snapshots.
+
+```bash
+MEMORY_MONITOR=true
+```
+
+### SNAPSHOT_INTERVAL
+
+**Default**: `60` (minutes)
+
+Interval for memory snapshots when `MEMORY_MONITOR=true`.
+
+```bash
+SNAPSHOT_INTERVAL=30  # 30 minutes
+```
+
+## Event Collection
+
+### DISABLE_METRICS
+
+**Default**: `false`
+
+Disable metrics collection (CPU, memory, disk).
+
+```bash
+DISABLE_METRICS=true
+```
+
+### DISABLE_EVENTS
+
+**Default**: `false`
+
+Disable container event collection.
+
+```bash
+DISABLE_EVENTS=true
+```
+
+## Git Integration
+
+### GIT_REPOS_DIR
+
+**Default**: `$DATA_DIR/git-repos`
+
+Directory for cloned Git repositories.
+
+```bash
+GIT_REPOS_DIR=/custom/git/repos
+```
+
+## Timezone
+
+### TZ
+
+**Default**: `UTC`
+
+Timezone for logs and timestamps.
+
+```bash
+TZ=America/New_York
+TZ=Europe/London
+TZ=Asia/Tokyo
+```
+
+## Example Configuration
+
+### Docker Compose with PostgreSQL
+
+```yaml docker-compose.yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dockhand
+      POSTGRES_PASSWORD: secure-password
+      POSTGRES_DB: dockhand
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  dockhand:
+    image: fnsys/dockhand:latest
+    ports:
+      - 3000:3000
+    environment:
+      # Database
+      DATABASE_URL: postgres://dockhand:secure-password@postgres:5432/dockhand
+      
+      # Security
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      COOKIE_SECURE: "true"
+      
+      # User
+      PUID: 1000
+      PGID: 1000
+      
+      # Performance
+      COMPOSE_TIMEOUT: 1800
+      
+      # Timezone
+      TZ: America/New_York
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  dockhand_data:
+```
+
+### Environment File (.env)
+
+```bash .env
+# Core
+PORT=3000
+NODE_ENV=production
+DATA_DIR=/app/data
+
+# Database
+DATABASE_URL=postgres://dockhand:password@postgres:5432/dockhand
+DB_FAIL_ON_MIGRATION_ERROR=true
+
+# Security
+ENCRYPTION_KEY=your-32-byte-hex-key-here
+COOKIE_SECURE=true
+
+# User
+PUID=1000
+PGID=1000
+
+# Docker
+DOCKER_SOCKET=/var/run/docker.sock
+
+# Performance
+COMPOSE_TIMEOUT=900
+SKIP_DF_COLLECTION=false
+
+# Timezone
+TZ=UTC
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use .env Files" icon="file">
+    Store sensitive variables in `.env` files, not in `docker-compose.yaml`.
+  </Card>
+  
+  <Card title="Back Up Keys" icon="key">
+    Back up `ENCRYPTION_KEY` and `.encryption_key` file. Without them, encrypted data is lost.
+  </Card>
+  
+  <Card title="Set Timeouts" icon="clock">
+    Increase `COMPOSE_TIMEOUT` for large stacks that take time to deploy.
+  </Card>
+  
+  <Card title="Use PostgreSQL" icon="database">
+    For production, use PostgreSQL instead of SQLite for better performance and reliability.
+  </Card>
+</CardGroup>
+
+## Validation
+
+Check current environment variables:
+
+```bash
+# In running container
+docker exec dockhand env | grep -E "(PORT|DATABASE_URL|ENCRYPTION_KEY)"
+
+# In compose
+docker compose config
+```
+
+Test database connection:
+```bash
+docker exec dockhand node -e "console.log(process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite')"
+```

@@ -1,0 +1,750 @@
+---
+title: 'Configuration'
+description: 'Environment variables and advanced configuration options'
+icon: 'sliders'
+---
+
+Dockhand can be configured using environment variables. This guide covers all available configuration options.
+
+## Environment Variables
+
+### Core Settings
+
+<ParamField path="PORT" type="string" default="3000">
+  Port number for the web server. The application listens on `0.0.0.0` by default.
+  
+  ```yaml
+  environment:
+    PORT: "8080"
+  ```
+</ParamField>
+
+<ParamField path="HOST" type="string" default="0.0.0.0">
+  Host address to bind the web server. Use `0.0.0.0` to accept connections from any interface.
+  
+  ```yaml
+  environment:
+    HOST: "127.0.0.1"  # Localhost only
+  ```
+</ParamField>
+
+<ParamField path="DATA_DIR" type="string" default="/app/data">
+  Directory for storing application data (database, stacks, cache). Should be mounted as a volume for data persistence.
+  
+  ```yaml
+  environment:
+    DATA_DIR: /app/data
+  volumes:
+    - dockhand_data:/app/data
+  ```
+</ParamField>
+
+<ParamField path="DOCKHAND_HOSTNAME" type="string" default="auto-detected">
+  Override the detected Docker host hostname. Useful for licensing and multi-host setups.
+  
+  ```yaml
+  environment:
+    DOCKHAND_HOSTNAME: production-docker-01
+  ```
+  
+  <Info>
+    If not set, Dockhand automatically detects the hostname from the Docker daemon.
+  </Info>
+</ParamField>
+
+### Database Configuration
+
+<ParamField path="DATABASE_URL" type="string" default="sqlite">
+  PostgreSQL connection string. If not set, Dockhand uses SQLite (stored in `DATA_DIR/dockhand.db`).
+  
+  ```yaml
+  environment:
+    DATABASE_URL: postgres://user:password@host:5432/database
+  ```
+  
+  **Format**: `postgres://USERNAME:PASSWORD@HOST:PORT/DATABASE`
+  
+  <Warning>
+    Ensure the PostgreSQL database exists before starting Dockhand. Migrations run automatically.
+  </Warning>
+</ParamField>
+
+<ParamField path="DB_FAIL_ON_MIGRATION_ERROR" type="boolean" default="true">
+  Stop application startup if database migrations fail. Set to `false` to continue despite migration errors (not recommended).
+  
+  ```yaml
+  environment:
+    DB_FAIL_ON_MIGRATION_ERROR: "false"
+  ```
+</ParamField>
+
+<ParamField path="DB_VERBOSE_LOGGING" type="boolean" default="false">
+  Enable verbose SQL query logging for debugging database issues.
+  
+  ```yaml
+  environment:
+    DB_VERBOSE_LOGGING: "true"
+  ```
+</ParamField>
+
+<ParamField path="SKIP_MIGRATIONS" type="boolean" default="false">
+  Skip database migrations entirely. Useful for read-only replicas or troubleshooting.
+  
+  ```yaml
+  environment:
+    SKIP_MIGRATIONS: "true"
+  ```
+  
+  <Warning>
+    Only use this if you know what you're doing. Missing migrations will cause application errors.
+  </Warning>
+</ParamField>
+
+### Docker Connection
+
+<ParamField path="DOCKER_SOCKET" type="string" default="/var/run/docker.sock">
+  Path to the Docker socket inside the container. Useful when Docker socket is mounted at a non-standard location.
+  
+  ```yaml
+  environment:
+    DOCKER_SOCKET: /custom/path/docker.sock
+  volumes:
+    - /var/run/docker.sock:/custom/path/docker.sock
+  ```
+</ParamField>
+
+<ParamField path="DOCKER_HOST" type="string" default="unix:///var/run/docker.sock">
+  Docker daemon connection URL. Supports Unix socket, TCP, and SSH protocols.
+  
+  ```yaml
+  # TCP connection
+  environment:
+    DOCKER_HOST: tcp://192.168.1.100:2376
+  
+  # Unix socket (default)
+  environment:
+    DOCKER_HOST: unix:///var/run/docker.sock
+  ```
+  
+  <Note>
+    When using TCP, configure TLS certificates via the web UI (Settings > Environments) for secure connections.
+  </Note>
+</ParamField>
+
+<ParamField path="DOCKER_API_VERSION" type="string" default="auto-negotiated">
+  Force a specific Docker API version. Normally auto-negotiated with the daemon.
+  
+  ```yaml
+  environment:
+    DOCKER_API_VERSION: "1.41"
+  ```
+</ParamField>
+
+<ParamField path="HOST_DATA_DIR" type="string" default="auto-detected">
+  Host path to the data directory. Used for translating container paths when creating stacks. Auto-detected by inspecting Dockhand's own container.
+  
+  ```yaml
+  environment:
+    HOST_DATA_DIR: /opt/dockhand/data
+  volumes:
+    - /opt/dockhand/data:/app/data
+  ```
+</ParamField>
+
+<ParamField path="HOST_DOCKER_SOCKET" type="string" default="auto-detected">
+  Host path to the Docker socket. Used for socket-proxy scenarios or non-standard socket locations.
+  
+  ```yaml
+  environment:
+    HOST_DOCKER_SOCKET: /var/run/docker.sock
+  ```
+</ParamField>
+
+### Security & Authentication
+
+<ParamField path="ENCRYPTION_KEY" type="string" default="auto-generated">
+  Base64-encoded 32-byte encryption key for encrypting sensitive data (passwords, tokens, certificates). Auto-generated if not provided.
+  
+  ```yaml
+  environment:
+    ENCRYPTION_KEY: "your-base64-encoded-32-byte-key-here"
+  ```
+  
+  <Info>
+    Generate a key with: `openssl rand -base64 32`
+  </Info>
+  
+  <Warning>
+    Store this securely! Loss of the encryption key means loss of all encrypted credentials.
+  </Warning>
+</ParamField>
+
+<ParamField path="COOKIE_SECURE" type="boolean" default="auto">
+  Force secure cookies (HTTPS-only). Auto-detected based on `x-forwarded-proto` header.
+  
+  ```yaml
+  environment:
+    COOKIE_SECURE: "true"  # Force secure cookies
+    # or
+    COOKIE_SECURE: "false" # Allow HTTP cookies
+  ```
+  
+  - `true`: Always use Secure flag (requires HTTPS)
+  - `false`: Never use Secure flag (allows HTTP)
+  - Not set: Auto-detect based on `x-forwarded-proto: https` header
+</ParamField>
+
+<ParamField path="DISABLE_LOCAL_LOGIN" type="boolean" default="false">
+  Disable username/password authentication and require SSO/OIDC login.
+  
+  ```yaml
+  environment:
+    DISABLE_LOCAL_LOGIN: "true"
+  ```
+  
+  <Warning>
+    Ensure you have a working OIDC provider configured before enabling this, or you'll be locked out.
+  </Warning>
+</ParamField>
+
+### User & Permissions
+
+<ParamField path="PUID" type="integer" default="1001">
+  User ID to run the application as. Useful for matching host user permissions.
+  
+  ```yaml
+  environment:
+    PUID: "1000"
+  ```
+  
+  <Note>
+    The container automatically configures the `dockhand` user with this UID on startup.
+  </Note>
+</ParamField>
+
+<ParamField path="PGID" type="integer" default="1001">
+  Group ID to run the application as. Useful for matching host group permissions.
+  
+  ```yaml
+  environment:
+    PGID: "1000"
+  ```
+</ParamField>
+
+### Performance & Timeouts
+
+<ParamField path="COMPOSE_TIMEOUT" type="integer" default="900">
+  Timeout in seconds for Docker Compose operations (up, down, pull). Increase for slow networks or large images.
+  
+  ```yaml
+  environment:
+    COMPOSE_TIMEOUT: "1800"  # 30 minutes
+  ```
+</ParamField>
+
+<ParamField path="SKIP_DF_COLLECTION" type="boolean" default="false">
+  Skip disk usage collection (`df` command). Recommended for Synology NAS and other systems where `df` is slow.
+  
+  ```yaml
+  environment:
+    SKIP_DF_COLLECTION: "true"
+  ```
+  
+  <Info>
+    Disabling this removes disk usage graphs from the dashboard but significantly improves performance on affected systems.
+  </Info>
+</ParamField>
+
+<ParamField path="MEMORY_MONITOR" type="boolean" default="false">
+  Enable memory usage tracking and RSS snapshots for debugging memory leaks. Enables the `/api/debug/memory` endpoint.
+  
+  ```yaml
+  environment:
+    MEMORY_MONITOR: "true"
+  ```
+  
+  <Warning>
+    This is a debugging feature and adds overhead. Only enable when troubleshooting memory issues.
+  </Warning>
+</ParamField>
+
+<ParamField path="SNAPSHOT_INTERVAL" type="integer" default="60">
+  Interval in minutes for memory snapshots when `MEMORY_MONITOR=true`.
+  
+  ```yaml
+  environment:
+    MEMORY_MONITOR: "true"
+    SNAPSHOT_INTERVAL: "30"  # Every 30 minutes
+  ```
+</ParamField>
+
+<ParamField path="DISABLE_METRICS" type="boolean" default="false">
+  Disable metrics collection subprocess. Metrics include container stats, system info, and resource usage.
+  
+  ```yaml
+  environment:
+    DISABLE_METRICS: "true"
+  ```
+</ParamField>
+
+<ParamField path="DISABLE_EVENTS" type="boolean" default="false">
+  Disable Docker event stream monitoring. Events drive real-time UI updates.
+  
+  ```yaml
+  environment:
+    DISABLE_EVENTS: "true"
+  ```
+</ParamField>
+
+### Git Integration
+
+<ParamField path="GIT_REPOS_DIR" type="string" default="$DATA_DIR/git-repos">
+  Directory for storing cloned Git repositories (for Git-based stacks).
+  
+  ```yaml
+  environment:
+    GIT_REPOS_DIR: /app/data/git-repos
+  ```
+</ParamField>
+
+## Configuration Examples
+
+### Production Deployment with PostgreSQL
+
+```yaml docker-compose.yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dockhand
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: dockhand
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - dockhand
+
+  dockhand:
+    image: fnsys/dockhand:latest
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    environment:
+      # Database
+      DATABASE_URL: postgres://dockhand:${DB_PASSWORD}@postgres:5432/dockhand
+      
+      # Security
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      COOKIE_SECURE: "true"
+      
+      # Performance
+      COMPOSE_TIMEOUT: "1800"
+      
+      # Authentication
+      DISABLE_LOCAL_LOGIN: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    depends_on:
+      - postgres
+    networks:
+      - dockhand
+
+volumes:
+  postgres_data:
+  dockhand_data:
+
+networks:
+  dockhand:
+```
+
+### Remote Docker Host Management
+
+```yaml docker-compose.yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    environment:
+      # Connect to remote Docker daemon
+      DOCKER_HOST: tcp://remote-docker.example.com:2376
+      
+      # Custom hostname
+      DOCKHAND_HOSTNAME: central-management
+    volumes:
+      # No Docker socket needed for remote
+      - dockhand_data:/app/data
+
+volumes:
+  dockhand_data:
+```
+
+<Note>
+  Configure TLS certificates for the remote Docker host via the web UI (Settings > Environments).
+</Note>
+
+### High-Performance Configuration
+
+```yaml docker-compose.yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    environment:
+      # Disable slow operations
+      SKIP_DF_COLLECTION: "true"
+      
+      # Increase timeouts for large operations
+      COMPOSE_TIMEOUT: "3600"
+      
+      # Custom UID/GID
+      PUID: "1000"
+      PGID: "1000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+volumes:
+  dockhand_data:
+```
+
+### Debugging Configuration
+
+```yaml docker-compose.yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    environment:
+      # Enable debugging
+      DB_VERBOSE_LOGGING: "true"
+      MEMORY_MONITOR: "true"
+      SNAPSHOT_INTERVAL: "15"
+      
+      # Lenient error handling
+      DB_FAIL_ON_MIGRATION_ERROR: "false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+
+volumes:
+  dockhand_data:
+```
+
+## Session Management
+
+Session timeout is configured via the web UI:
+
+<Steps>
+  <Step title="Navigate to Settings">
+    Go to **Settings** > **Authentication** in the web interface.
+  </Step>
+
+  <Step title="Set Session Timeout">
+    Configure **Session Timeout** in seconds:
+    - Minimum: `1` second
+    - Maximum: `2592000` seconds (30 days)
+    - Default: `86400` seconds (24 hours)
+  </Step>
+
+  <Step title="Save Changes">
+    Click **Save**. New sessions will use the updated timeout.
+  </Step>
+</Steps>
+
+<Info>
+  Sessions are stored in the database and survive container restarts.
+</Info>
+
+## TLS & HTTPS
+
+Dockhand does not include a built-in TLS/HTTPS server. Use a reverse proxy for production deployments.
+
+### Nginx Reverse Proxy Example
+
+```nginx nginx.conf
+server {
+    listen 443 ssl http2;
+    server_name dockhand.example.com;
+
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+    location / {
+        proxy_pass http://dockhand:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+<Note>
+  The `X-Forwarded-Proto: https` header enables automatic secure cookie mode.
+</Note>
+
+### Traefik Reverse Proxy Example
+
+```yaml docker-compose.yaml
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --providers.docker=true
+      - --certificatesresolvers.letsencrypt.acme.email=admin@example.com
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - traefik_acme:/acme.json
+
+  dockhand:
+    image: fnsys/dockhand:latest
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dockhand.rule=Host(`dockhand.example.com`)
+      - traefik.http.routers.dockhand.entrypoints=websecure
+      - traefik.http.routers.dockhand.tls.certresolver=letsencrypt
+      - traefik.http.services.dockhand.loadbalancer.server.port=3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+
+volumes:
+  traefik_acme:
+  dockhand_data:
+```
+
+## Backup & Restore
+
+### SQLite Database
+
+<Tabs>
+  <Tab title="Backup">
+    ```bash
+    # Stop Dockhand
+    docker stop dockhand
+    
+    # Backup data directory
+    docker run --rm \
+      -v dockhand_data:/data \
+      -v $(pwd):/backup \
+      alpine tar czf /backup/dockhand-backup-$(date +%Y%m%d).tar.gz /data
+    
+    # Start Dockhand
+    docker start dockhand
+    ```
+  </Tab>
+
+  <Tab title="Restore">
+    ```bash
+    # Stop Dockhand
+    docker stop dockhand
+    
+    # Remove old data
+    docker volume rm dockhand_data
+    docker volume create dockhand_data
+    
+    # Restore backup
+    docker run --rm \
+      -v dockhand_data:/data \
+      -v $(pwd):/backup \
+      alpine sh -c "cd / && tar xzf /backup/dockhand-backup-YYYYMMDD.tar.gz"
+    
+    # Start Dockhand
+    docker start dockhand
+    ```
+  </Tab>
+</Tabs>
+
+### PostgreSQL Database
+
+<Tabs>
+  <Tab title="Backup">
+    ```bash
+    # Backup PostgreSQL database
+    docker exec dockhand-postgres pg_dump -U dockhand dockhand \
+      > dockhand-backup-$(date +%Y%m%d).sql
+    
+    # Backup data directory (stacks, configs)
+    docker run --rm \
+      -v dockhand_data:/data \
+      -v $(pwd):/backup \
+      alpine tar czf /backup/dockhand-data-$(date +%Y%m%d).tar.gz /data
+    ```
+  </Tab>
+
+  <Tab title="Restore">
+    ```bash
+    # Restore database
+    cat dockhand-backup-YYYYMMDD.sql | \
+      docker exec -i dockhand-postgres psql -U dockhand dockhand
+    
+    # Restore data directory
+    docker stop dockhand
+    docker volume rm dockhand_data
+    docker volume create dockhand_data
+    
+    docker run --rm \
+      -v dockhand_data:/data \
+      -v $(pwd):/backup \
+      alpine sh -c "cd / && tar xzf /backup/dockhand-data-YYYYMMDD.tar.gz"
+    
+    docker start dockhand
+    ```
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database migration errors">
+    **Symptoms**: "Migration failed" errors on startup
+    
+    **Solutions**:
+    
+    1. Check database connectivity:
+       ```bash
+       docker logs dockhand | grep -i database
+       ```
+    
+    2. Verify DATABASE_URL format:
+       ```
+       postgres://USERNAME:PASSWORD@HOST:PORT/DATABASE
+       ```
+    
+    3. Skip migrations temporarily (for diagnosis only):
+       ```yaml
+       environment:
+         SKIP_MIGRATIONS: "true"
+       ```
+  </Accordion>
+
+  <Accordion title="Performance issues on Synology NAS">
+    **Symptom**: Slow dashboard, high CPU usage
+    
+    **Solution**: Disable disk usage collection
+    
+    ```yaml
+    environment:
+      SKIP_DF_COLLECTION: "true"
+    ```
+    
+    The `df` command is extremely slow on Synology DSM and can freeze the UI.
+  </Accordion>
+
+  <Accordion title="Memory leaks or high memory usage">
+    **Symptom**: Container memory grows over time
+    
+    **Solution**: Enable memory monitoring
+    
+    ```yaml
+    environment:
+      MEMORY_MONITOR: "true"
+      SNAPSHOT_INTERVAL: "30"
+    ```
+    
+    Then access: `http://localhost:3000/api/debug/memory`
+  </Accordion>
+
+  <Accordion title="Compose operations timeout">
+    **Symptom**: Stack deployments fail with "timeout" errors
+    
+    **Solution**: Increase timeout
+    
+    ```yaml
+    environment:
+      COMPOSE_TIMEOUT: "1800"  # 30 minutes
+    ```
+    
+    Useful for large images or slow networks.
+  </Accordion>
+
+  <Accordion title="Cannot access Docker socket">
+    **Symptom**: "Permission denied" or "Socket not accessible"
+    
+    **Solutions**:
+    
+    1. Add Docker socket group:
+       ```bash
+       docker run -d \
+         --name dockhand \
+         --group-add $(stat -c '%g' /var/run/docker.sock) \
+         -v /var/run/docker.sock:/var/run/docker.sock \
+         fnsys/dockhand:latest
+       ```
+    
+    2. Verify socket is mounted:
+       ```bash
+       docker exec dockhand ls -la /var/run/docker.sock
+       ```
+    
+    3. Check entrypoint logs:
+       ```bash
+       docker logs dockhand 2>&1 | head -20
+       ```
+  </Accordion>
+
+  <Accordion title="Locked out after enabling DISABLE_LOCAL_LOGIN">
+    **Solution**: Temporarily re-enable local login
+    
+    ```bash
+    docker stop dockhand
+    docker rm dockhand
+    
+    # Start without DISABLE_LOCAL_LOGIN
+    docker run -d \
+      --name dockhand \
+      -p 3000:3000 \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v dockhand_data:/app/data \
+      fnsys/dockhand:latest
+    ```
+    
+    Then configure OIDC provider before re-enabling.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/auth/overview">
+    Configure OIDC/SSO and LDAP authentication
+  </Card>
+  
+  <Card title="Stacks" icon="layer-group" href="/features/stacks">
+    Deploy and manage Docker Compose stacks
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Integrate Dockhand with automation tools
+  </Card>
+  
+  <Card title="Deployment Guide" icon="server" href="/deployment/docker">
+    Production deployment best practices
+  </Card>
+</CardGroup>

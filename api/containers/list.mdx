@@ -1,0 +1,227 @@
+---
+title: List Containers
+description: Retrieve a list of Docker containers from a specific environment
+---
+
+## List Containers
+
+<RequestExample>
+```bash
+GET /api/containers?env=1&all=true
+```
+</RequestExample>
+
+Retrieves a list of containers from the specified environment. Requires an environment ID to be provided.
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID from which to list containers. This parameter is required.
+</ParamField>
+
+<ParamField query="all" type="boolean" default="true">
+  Whether to show all containers (including stopped ones). Defaults to `true` if not specified.
+</ParamField>
+
+### Response
+
+Returns an array of container objects.
+
+<ResponseField name="containers" type="array">
+  Array of container objects with the following properties:
+  
+  <ResponseField name="id" type="string">
+    Container ID
+  </ResponseField>
+  
+  <ResponseField name="name" type="string">
+    Container name
+  </ResponseField>
+  
+  <ResponseField name="image" type="string">
+    Image used by the container
+  </ResponseField>
+  
+  <ResponseField name="state" type="string">
+    Current state of the container (e.g., "running", "exited", "paused")
+  </ResponseField>
+  
+  <ResponseField name="status" type="string">
+    Human-readable status string
+  </ResponseField>
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Success
+- `403` - Permission denied or environment access denied
+- `404` - Environment not found
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X GET "https://your-dockhand.com/api/containers?env=1&all=true" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/containers?env=1&all=true', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const containers = await response.json();
+console.log(containers);
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+[
+  {
+    "id": "abc123def456",
+    "name": "my-app",
+    "image": "nginx:latest",
+    "state": "running",
+    "status": "Up 2 hours"
+  },
+  {
+    "id": "xyz789ghi012",
+    "name": "database",
+    "image": "postgres:15",
+    "state": "exited",
+    "status": "Exited (0) 5 minutes ago"
+  }
+]
+```
+
+## Create Container
+
+<RequestExample>
+```bash
+POST /api/containers?env=1
+```
+</RequestExample>
+
+Creates a new container in the specified environment. If the image is not available locally, it will be automatically pulled.
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container will be created.
+</ParamField>
+
+### Request Body
+
+<ParamField body="image" type="string" required>
+  The Docker image to use for the container (e.g., "nginx:latest")
+</ParamField>
+
+<ParamField body="name" type="string">
+  Name for the container
+</ParamField>
+
+<ParamField body="startAfterCreate" type="boolean" default="false">
+  Whether to automatically start the container after creation
+</ParamField>
+
+<ParamField body="env" type="array">
+  Array of environment variables in the format ["KEY=value"]
+</ParamField>
+
+<ParamField body="ports" type="object">
+  Port bindings object mapping container ports to host ports
+</ParamField>
+
+<ParamField body="volumes" type="object">
+  Volume bindings object
+</ParamField>
+
+<ParamField body="labels" type="object">
+  Labels to attach to the container
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the container was created successfully
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  The ID of the created container
+</ResponseField>
+
+<ResponseField name="imagePulled" type="boolean">
+  Whether the image was pulled automatically
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+<ResponseField name="details" type="string">
+  Additional error details
+</ResponseField>
+
+**Status Codes:**
+- `200` - Container created successfully
+- `403` - Permission denied or environment access denied
+- `500` - Failed to create container or pull image
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X POST "https://your-dockhand.com/api/containers?env=1" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=your-session-cookie" \
+  -d '{
+    "image": "nginx:latest",
+    "name": "my-nginx",
+    "startAfterCreate": true,
+    "ports": {
+      "80/tcp": [{"HostPort": "8080"}]
+    }
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/containers?env=1', {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    image: 'nginx:latest',
+    name: 'my-nginx',
+    startAfterCreate: true,
+    ports: {
+      '80/tcp': [{ HostPort: '8080' }]
+    }
+  })
+});
+
+const result = await response.json();
+console.log(result);
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true,
+  "id": "abc123def456789",
+  "imagePulled": true
+}
+```

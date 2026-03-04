@@ -1,0 +1,373 @@
+---
+title: 'API Overview'
+description: 'Complete reference for the Dockhand REST API'
+---
+
+## Introduction
+
+The Dockhand API provides programmatic access to all Docker management functionality. Use it to automate container operations, manage stacks, configure environments, and integrate Dockhand into your workflows.
+
+## Base URL
+
+All API requests are made to your Dockhand instance:
+
+```
+http://your-dockhand-instance:3000/api
+```
+
+For production deployments with SSL:
+
+```
+https://your-dockhand-instance.com/api
+```
+
+<Note>
+  The API is served from the same domain as the web interface on the `/api` path.
+</Note>
+
+## Request Format
+
+### HTTP Methods
+
+The API uses standard HTTP methods:
+
+- `GET` - Retrieve resources
+- `POST` - Create resources or trigger actions
+- `PUT` / `PATCH` - Update resources
+- `DELETE` - Remove resources
+
+### Content Type
+
+All requests with a body must use `application/json`:
+
+```bash
+Content-Type: application/json
+```
+
+### Query Parameters
+
+Many endpoints accept query parameters for filtering and configuration:
+
+```bash
+GET /api/containers?env=1&all=true
+```
+
+<ParamField query="env" type="integer">
+  Environment ID to scope the request to a specific Docker environment
+</ParamField>
+
+## Response Format
+
+### Success Responses
+
+Successful responses return JSON with appropriate HTTP status codes:
+
+```json
+{
+  "success": true,
+  "id": "abc123"
+}
+```
+
+### Resource Lists
+
+List endpoints return arrays:
+
+```json
+[
+  {
+    "id": "container1",
+    "name": "web-app",
+    "status": "running"
+  },
+  {
+    "id": "container2",
+    "name": "database",
+    "status": "running"
+  }
+]
+```
+
+### Error Responses
+
+Errors return JSON with an error message and appropriate status code:
+
+```json
+{
+  "error": "Permission denied"
+}
+```
+
+## HTTP Status Codes
+
+Dockhand uses standard HTTP status codes:
+
+<ResponseField name="200" type="OK">
+  Request succeeded
+</ResponseField>
+
+<ResponseField name="201" type="Created">
+  Resource created successfully
+</ResponseField>
+
+<ResponseField name="400" type="Bad Request">
+  Invalid request parameters or body
+</ResponseField>
+
+<ResponseField name="401" type="Unauthorized">
+  Authentication required or session expired
+</ResponseField>
+
+<ResponseField name="403" type="Forbidden">
+  Insufficient permissions or enterprise license required
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Resource or environment not found
+</ResponseField>
+
+<ResponseField name="429" type="Too Many Requests">
+  Rate limit exceeded (login attempts)
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server error or Docker operation failed
+</ResponseField>
+
+## Error Handling
+
+### Standard Error Format
+
+All errors follow a consistent format:
+
+```json
+{
+  "error": "Container not found",
+  "details": "No container with ID abc123"
+}
+```
+
+<ResponseField name="error" type="string" required>
+  Human-readable error message
+</ResponseField>
+
+<ResponseField name="details" type="string">
+  Additional error details when available
+</ResponseField>
+
+### Common Error Scenarios
+
+#### Docker Connection Errors
+
+When a Docker environment is offline or unreachable, most endpoints return empty arrays or specific error messages:
+
+```json
+{
+  "error": "Environment not found"
+}
+```
+
+#### Permission Errors
+
+When authentication is enabled and the user lacks required permissions:
+
+```json
+{
+  "error": "Permission denied"
+}
+```
+
+#### Validation Errors
+
+When request parameters are invalid:
+
+```json
+{
+  "error": "Stack name is required"
+}
+```
+
+## API Resources
+
+The Dockhand API provides access to:
+
+### Core Resources
+
+- **Containers** - Create, start, stop, and manage Docker containers
+- **Images** - Pull, build, tag, and inspect Docker images
+- **Networks** - Manage Docker networks
+- **Volumes** - Create and manage Docker volumes
+- **Stacks** - Deploy and manage Docker Compose stacks
+
+### Management
+
+- **Environments** - Configure remote Docker connections
+- **Users** - Manage user accounts (when authentication is enabled)
+- **Roles** - Configure RBAC permissions (Enterprise)
+- **Settings** - Application configuration and preferences
+
+### Git Integration
+
+- **Git Repositories** - Connect to Git repositories for automated deployments
+- **Git Stacks** - Deploy stacks from Git with automatic sync
+- **Webhooks** - Configure automated deployments via Git webhooks
+
+### Monitoring
+
+- **Events** - Stream Docker events in real-time
+- **Stats** - Container and system metrics
+- **Health** - System health checks
+- **Audit Logs** - View security audit logs (Enterprise)
+
+## Streaming Responses
+
+Some endpoints use Server-Sent Events (SSE) for real-time updates:
+
+- Container stats streaming
+- Build output
+- Stack deployment progress
+- Docker events
+
+### Example: Streaming Events
+
+```bash
+curl -N -H "Cookie: session=..." \
+  http://localhost:3000/api/events?env=1
+```
+
+Response:
+
+```
+event: container-start
+data: {"id":"abc123","name":"web-app"}
+
+event: container-die
+data: {"id":"def456","name":"worker"}
+```
+
+<Note>
+  Streaming endpoints require maintaining an open connection and return `Content-Type: text/event-stream`.
+</Note>
+
+## Rate Limiting
+
+Rate limiting is applied to authentication endpoints:
+
+- **Login attempts**: 5 failed attempts per IP/username combination
+- **Lockout duration**: Exponential backoff (5-60 seconds)
+
+<Warning>
+  After 5 consecutive failed login attempts, you'll receive a 429 status with a retry-after message.
+</Warning>
+
+## Environment Context
+
+Most Docker-related operations require an environment ID to specify which Docker daemon to target:
+
+```bash
+GET /api/containers?env=1
+GET /api/stacks?env=2
+```
+
+<ParamField query="env" type="integer" required>
+  The ID of the Docker environment (1 for local, or remote environment IDs)
+</ParamField>
+
+<Note>
+  When no environment is configured, Dockhand connects to the local Docker daemon with `env=1`.
+</Note>
+
+## Pagination
+
+Currently, the API does not implement pagination. All list endpoints return complete result sets.
+
+<Note>
+  For large deployments, consider filtering by environment or using query parameters to reduce response sizes.
+</Note>
+
+## Versioning
+
+The API currently does not use versioning. Breaking changes are avoided, and new fields are added in a backward-compatible manner.
+
+## Example Requests
+
+### List Containers
+
+```bash
+curl -X GET "http://localhost:3000/api/containers?env=1" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN"
+```
+
+### Create Container
+
+```bash
+curl -X POST "http://localhost:3000/api/containers?env=1" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "name": "my-nginx",
+    "image": "nginx:latest",
+    "startAfterCreate": true,
+    "portBindings": {
+      "80/tcp": [{"HostPort": "8080"}]
+    }
+  }'
+```
+
+### List Stacks
+
+```bash
+curl -X GET "http://localhost:3000/api/stacks?env=1" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN"
+```
+
+### Deploy Stack
+
+```bash
+curl -X POST "http://localhost:3000/api/stacks?env=1" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "name": "wordpress",
+    "compose": "version: '3.8'\nservices:\n  wordpress:\n    image: wordpress:latest\n    ports:\n      - 8080:80",
+    "start": true
+  }'
+```
+
+## Best Practices
+
+### Authentication
+
+1. Always check if authentication is enabled via `/api/auth/session`
+2. Obtain session cookies via `/api/auth/login`
+3. Include session cookies in all subsequent requests
+4. Handle 401 responses by redirecting to login
+
+### Error Handling
+
+1. Always check HTTP status codes
+2. Parse error messages from response JSON
+3. Handle Docker connection errors gracefully
+4. Implement retry logic for transient failures
+
+### Environment Management
+
+1. Always specify the `env` parameter for Docker operations
+2. Handle 404 errors when environments are deleted
+3. Check environment health before operations
+4. Cache environment IDs on the client side
+
+### Performance
+
+1. Use streaming endpoints for long-running operations
+2. Filter results using query parameters
+3. Avoid polling - use event streams when available
+4. Implement client-side caching for static data
+
+## Support
+
+For API issues or questions:
+
+- Check the [GitHub repository](https://github.com/dockhand-io/dockhand) for known issues
+- Review the source code in `src/routes/api/` for implementation details
+- Submit bug reports or feature requests via GitHub Issues

@@ -1,0 +1,316 @@
+---
+title: Inspect Container
+description: Get detailed information about a specific container
+---
+
+## Get Container Details
+
+<RequestExample>
+```bash
+GET /api/containers/{id}?env=1
+```
+</RequestExample>
+
+Retrieves detailed information about a specific container, including its configuration, state, and network settings.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+Returns a detailed container inspection object from the Docker API.
+
+<ResponseField name="Id" type="string">
+  Full container ID
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  Container name (includes leading slash)
+</ResponseField>
+
+<ResponseField name="Created" type="string">
+  ISO 8601 timestamp of when the container was created
+</ResponseField>
+
+<ResponseField name="Path" type="string">
+  Command executable being run
+</ResponseField>
+
+<ResponseField name="Args" type="array">
+  Command arguments
+</ResponseField>
+
+<ResponseField name="State" type="object">
+  Container state information
+  
+  <ResponseField name="Status" type="string">
+    Current status (e.g., "running", "exited", "paused")
+  </ResponseField>
+  
+  <ResponseField name="Running" type="boolean">
+    Whether the container is running
+  </ResponseField>
+  
+  <ResponseField name="Paused" type="boolean">
+    Whether the container is paused
+  </ResponseField>
+  
+  <ResponseField name="Restarting" type="boolean">
+    Whether the container is restarting
+  </ResponseField>
+  
+  <ResponseField name="ExitCode" type="number">
+    Exit code if the container has stopped
+  </ResponseField>
+  
+  <ResponseField name="StartedAt" type="string">
+    ISO 8601 timestamp of when the container started
+  </ResponseField>
+  
+  <ResponseField name="FinishedAt" type="string">
+    ISO 8601 timestamp of when the container finished
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="Image" type="string">
+  Image ID
+</ResponseField>
+
+<ResponseField name="Config" type="object">
+  Container configuration
+  
+  <ResponseField name="Hostname" type="string">
+    Container hostname
+  </ResponseField>
+  
+  <ResponseField name="Env" type="array">
+    Environment variables as strings in "KEY=value" format
+  </ResponseField>
+  
+  <ResponseField name="Cmd" type="array">
+    Command to run
+  </ResponseField>
+  
+  <ResponseField name="Image" type="string">
+    Image name and tag
+  </ResponseField>
+  
+  <ResponseField name="Labels" type="object">
+    Container labels
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="NetworkSettings" type="object">
+  Network configuration
+  
+  <ResponseField name="IPAddress" type="string">
+    Primary IP address
+  </ResponseField>
+  
+  <ResponseField name="Ports" type="object">
+    Port mappings
+  </ResponseField>
+  
+  <ResponseField name="Networks" type="object">
+    Network attachments
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="Mounts" type="array">
+  Volume mounts and bind mounts
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Success
+- `403` - Permission denied
+- `500` - Failed to inspect container
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X GET "https://your-dockhand.com/api/containers/abc123def456?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}?env=1`, {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const details = await response.json();
+console.log(details);
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "Id": "abc123def456789...",
+  "Name": "/my-nginx",
+  "Created": "2024-01-15T10:30:00.000Z",
+  "State": {
+    "Status": "running",
+    "Running": true,
+    "Paused": false,
+    "Restarting": false,
+    "ExitCode": 0,
+    "StartedAt": "2024-01-15T10:30:01.000Z"
+  },
+  "Image": "sha256:abc123...",
+  "Config": {
+    "Hostname": "abc123def456",
+    "Env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "NGINX_VERSION=1.25.3"
+    ],
+    "Image": "nginx:latest",
+    "Labels": {}
+  },
+  "NetworkSettings": {
+    "IPAddress": "172.17.0.2",
+    "Ports": {
+      "80/tcp": [
+        {
+          "HostIp": "0.0.0.0",
+          "HostPort": "8080"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Inspect Container (Dedicated Endpoint)
+
+<RequestExample>
+```bash
+GET /api/containers/{id}/inspect?env=1
+```
+</RequestExample>
+
+Alternative endpoint that provides the same inspection functionality. Returns identical data to the main container details endpoint.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+### Response
+
+Same response format as the main container details endpoint.
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X GET "https://your-dockhand.com/api/containers/abc123def456/inspect?env=1" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}/inspect?env=1`, {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const details = await response.json();
+```
+</CodeGroup>
+
+## Delete Container
+
+<RequestExample>
+```bash
+DELETE /api/containers/{id}?env=1&force=true
+```
+</RequestExample>
+
+Removes a container from the specified environment. Also cleans up any associated auto-update schedules and pending updates.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The container ID or name to delete
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="env" type="string" required>
+  The environment ID where the container is located
+</ParamField>
+
+<ParamField query="force" type="boolean" default="false">
+  Force removal of a running container (using SIGKILL)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the container was successfully removed
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Status Codes:**
+- `200` - Container deleted successfully
+- `403` - Permission denied
+- `500` - Failed to remove container
+
+### Example
+
+<CodeGroup>
+```bash curl
+curl -X DELETE "https://your-dockhand.com/api/containers/abc123def456?env=1&force=true" \
+  -H "Cookie: session=your-session-cookie"
+```
+
+```javascript JavaScript
+const containerId = 'abc123def456';
+const response = await fetch(`/api/containers/${containerId}?env=1&force=true`, {
+  method: 'DELETE',
+  credentials: 'include'
+});
+
+const result = await response.json();
+console.log(result);
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "success": true
+}
+```

@@ -1,0 +1,361 @@
+---
+title: 'Git Stack Sync'
+api: 'POST /api/git/stacks/{id}/sync'
+description: 'Sync and deploy a Git-managed compose stack'
+---
+
+## Overview
+
+Git stacks are compose stacks synchronized from Git repositories. This endpoint pulls the latest changes from the repository and redeploys the stack if changes are detected.
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  Git stack ID (not the stack name)
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Whether the sync operation succeeded
+</ResponseField>
+
+<ResponseField name="deployed" type="boolean">
+  Whether the stack was redeployed (true only if changes were detected)
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if sync or deployment failed
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status message
+</ResponseField>
+
+<ResponseField name="output" type="string">
+  Docker Compose deployment output (if deployed)
+</ResponseField>
+
+<ResponseField name="commit" type="string">
+  Latest Git commit hash after sync
+</ResponseField>
+
+## Sync Behavior
+
+1. **Check Status**: Verifies stack isn't already syncing
+2. **Git Pull**: Fetches latest changes from the configured branch
+3. **Change Detection**: Compares new commit hash with last deployed commit
+4. **Deploy**: If changes detected, runs `docker compose up -d`
+5. **Skip**: If no changes, returns success without deploying
+
+<Info>
+  The sync operation only redeploys if the Git commit hash has changed. If the repository is up-to-date, no deployment occurs.
+</Info>
+
+<RequestExample>
+
+```bash cURL
+curl -X POST "https://your-dockhand-instance.com/api/git/stacks/5/sync" \
+  -H "Cookie: auth_token=your_token"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/git/stacks/5/sync', {
+  method: 'POST',
+  credentials: 'include'
+});
+
+const result = await response.json();
+
+if (result.success) {
+  if (result.deployed) {
+    console.log('Stack deployed:', result.output);
+  } else {
+    console.log('No changes detected');
+  }
+}
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://your-dockhand-instance.com/api/git/stacks/5/sync',
+    cookies={'auth_token': 'your_token'}
+)
+
+result = response.json()
+
+if result['success']:
+    if result['deployed']:
+        print(f"Stack deployed: {result['output']}")
+    else:
+        print("No changes detected")
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Changes Deployed
+{
+  "success": true,
+  "deployed": true,
+  "message": "Stack synced and deployed successfully",
+  "commit": "a1b2c3d4e5f6g7h8i9j0",
+  "output": "[+] Running 2/2\n ✔ Container my-app-web-1  Started\n ✔ Container my-app-db-1   Started"
+}
+```
+
+```json No Changes
+{
+  "success": true,
+  "deployed": false,
+  "message": "No changes detected",
+  "commit": "a1b2c3d4e5f6g7h8i9j0"
+}
+```
+
+```json Error
+{
+  "success": false,
+  "error": "Failed to pull from repository: authentication failed"
+}
+```
+
+</ResponseExample>
+
+## Creating a Git Stack
+
+Before syncing, you need to create a Git stack:
+
+```bash
+curl -X POST "https://your-dockhand-instance.com/api/git/stacks" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: auth_token=your_token" \
+  -d '{
+    "stackName": "my-app",
+    "environmentId": 1,
+    "url": "https://github.com/username/my-app.git",
+    "branch": "main",
+    "composePath": "docker-compose.yml",
+    "envFilePath": ".env",
+    "autoUpdate": true,
+    "autoUpdateCron": "0 3 * * *",
+    "credentialId": null,
+    "deployNow": true
+  }'
+```
+
+## Git Stack Configuration
+
+<ParamField body="stackName" type="string" required>
+  Unique stack name
+</ParamField>
+
+<ParamField body="url" type="string" required>
+  Git repository URL (HTTPS or SSH)
+</ParamField>
+
+<ParamField body="branch" type="string" default="main">
+  Git branch to track
+</ParamField>
+
+<ParamField body="composePath" type="string" default="compose.yaml">
+  Path to compose file in repository (relative to repo root)
+</ParamField>
+
+<ParamField body="envFilePath" type="string">
+  Path to .env file in repository (optional)
+</ParamField>
+
+<ParamField body="autoUpdate" type="boolean" default={false}>
+  Enable automatic syncing on a schedule
+</ParamField>
+
+<ParamField body="autoUpdateCron" type="string" default="0 3 * * *">
+  Cron expression for auto-sync schedule (default: 3 AM daily)
+</ParamField>
+
+<ParamField body="credentialId" type="number">
+  Git credential ID for private repositories (optional)
+</ParamField>
+
+<ParamField body="webhookEnabled" type="boolean" default={false}>
+  Enable webhook for push-triggered deploys
+</ParamField>
+
+<ParamField body="webhookSecret" type="string">
+  Secret for webhook verification (auto-generated if not provided)
+</ParamField>
+
+## Auto-Sync Schedules
+
+Git stacks can automatically sync on a schedule:
+
+```json
+{
+  "autoUpdate": true,
+  "autoUpdateSchedule": "daily",
+  "autoUpdateCron": "0 3 * * *"
+}
+```
+
+### Common Cron Patterns
+
+| Schedule | Cron Expression | Description |
+|----------|----------------|-------------|
+| Every hour | `0 * * * *` | At minute 0 of every hour |
+| Daily at 3 AM | `0 3 * * *` | At 3:00 AM every day |
+| Twice daily | `0 3,15 * * *` | At 3:00 AM and 3:00 PM |
+| Every 6 hours | `0 */6 * * *` | Every 6 hours |
+| Weekly (Monday 3 AM) | `0 3 * * 1` | At 3:00 AM every Monday |
+
+## Webhook Integration
+
+Enable webhooks to trigger sync on Git push events:
+
+1. **Enable webhook** in Git stack settings
+2. **Get webhook URL**: `https://your-dockhand-instance.com/api/git/stacks/{id}/webhook`
+3. **Configure in GitHub/GitLab**: Add webhook URL with secret
+
+### GitHub Webhook Setup
+
+1. Go to repository Settings → Webhooks → Add webhook
+2. Payload URL: `https://your-dockhand-instance.com/api/git/stacks/5/webhook`
+3. Content type: `application/json`
+4. Secret: (use the webhook secret from stack configuration)
+5. Events: Select "Just the push event"
+6. Active: ✓
+
+### GitLab Webhook Setup
+
+1. Go to repository Settings → Webhooks
+2. URL: `https://your-dockhand-instance.com/api/git/stacks/5/webhook`
+3. Secret token: (use the webhook secret from stack configuration)
+4. Trigger: Select "Push events"
+5. Enable SSL verification: ✓
+
+## Repository Structure Example
+
+```
+my-app/
+├── docker-compose.yml    # Main compose file
+├── .env.example          # Example environment variables
+├── .env                  # Actual environment variables (gitignored)
+├── README.md
+├── app/
+│   ├── Dockerfile
+│   └── src/
+└── nginx/
+    ├── Dockerfile
+    └── nginx.conf
+```
+
+## Environment Variable Overrides
+
+You can override environment variables without modifying the Git repository:
+
+```javascript
+// Update Git stack with env var overrides
+await fetch('/api/git/stacks/5', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  credentials: 'include',
+  body: JSON.stringify({
+    envVars: [
+      {
+        key: 'DATABASE_URL',
+        value: 'postgres://user:pass@db:5432/myapp',
+        isSecret: true
+      },
+      {
+        key: 'ENVIRONMENT',
+        value: 'production',
+        isSecret: false
+      }
+    ],
+    deployNow: true
+  })
+});
+```
+
+These overrides are stored in Dockhand's database and merged with the repository's .env file during deployment.
+
+## Error Handling
+
+### 404 Not Found
+
+```json
+{
+  "error": "Git stack not found"
+}
+```
+
+### 403 Forbidden
+
+- User lacks `stacks:edit` permission
+- User cannot access the stack's environment
+
+### 409 Conflict
+
+```json
+{
+  "success": false,
+  "error": "Stack is already syncing. Please wait for the current operation to complete."
+}
+```
+
+### 500 Internal Server Error
+
+```json
+{
+  "success": false,
+  "error": "Failed to pull from repository: Host key verification failed"
+}
+```
+
+Common causes:
+- Git authentication failed
+- Repository not accessible
+- Invalid compose file syntax
+- Network connectivity issues
+
+## Sync Status
+
+Get the current sync status of a Git stack:
+
+```bash
+curl "https://your-dockhand-instance.com/api/git/stacks/5" \
+  -H "Cookie: auth_token=your_token"
+```
+
+Response:
+
+```json
+{
+  "id": 5,
+  "stackName": "my-app",
+  "environmentId": 1,
+  "repositoryId": 3,
+  "composePath": "docker-compose.yml",
+  "envFilePath": ".env",
+  "autoUpdate": true,
+  "autoUpdateCron": "0 3 * * *",
+  "lastSync": "2026-03-04T10:30:00Z",
+  "lastCommit": "a1b2c3d4e5f6g7h8i9j0",
+  "syncStatus": "success",
+  "syncError": null
+}
+```
+
+## Permissions
+
+Requires `stacks:edit` permission for the stack's environment.
+
+## Related Endpoints
+
+- [Deploy Stack](/api/stacks/deploy) - Deploy a new stack with Git integration
+- [Update Stack](/api/stacks/update) - Update Git stack configuration
+- [Delete Stack](/api/stacks/delete) - Remove a Git-synced stack
+- [List Stacks](/api/stacks/list) - View all stacks including Git-synced ones
